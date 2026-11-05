@@ -62,8 +62,6 @@ gps?.scopes?.filter(entry => entry.scope.rules === "2024" && entry.scope.type ==
 | `unknown-original` | 原名或映射缺失 |
 | `ambiguous-name` | 同一显示名有多个候选，记录于 `conflicts` |
 
-共享核心将原 CPR 专用分类 `multiple-cpr-targets` 改为 `multiple-lookup-targets`。历史评估记录保留当时字段和计数；拆分不会自动解决那些条目。
-
 CPR 报告的 `registered` 是本次实际新增映射数；共享计划的 `planned` 是可用别名数。GPS 与 MISC 不注册全局映射，`scopes[].planned` 表示对应模式和上下文下的计划覆盖数，不是实际查找命中次数。`existing`、`unsupported` 分别记录已存在的名称和未命中目录的名称。GPS 或 MISC 模式切换后可增加新的作用域报告，各作用域数量可能重复，不能相加当作独立条目数。
 
 `source-error` 表示当前构建失败，`source` 指明译表、索引或 `truesight`。CPR 不写入部分结果；GPS 与 MISC 在构建失败后仅保留原查找。`unsupported-core`、`unsupported-cpr`、`unsupported-gps-entry`、`unsupported-misc-entry` 表示对应接口不可用；`no-visible-candidates` 表示 CPR 没有可见候选来源。GPS 与 MISC 的重试错误单独保存在 `api.lastLookupError`，原查找结果不受影响。
