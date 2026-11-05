@@ -22,6 +22,7 @@ test('review opens current state without calculating, previews explicitly, and a
  const Window=reviewWindowClass(),root=await new Window()._renderHTML();
  assert.equal(root.children[0].children[0].className,'ts-tabs');
  const find=key=>descendants(root).find(n=>n.tag==='button'&&n.textContent==='TRUESIGHT.'+key);
+ assert.equal(descendants(root).find(n=>n.className==='ts-message').textContent,'');
  assert.equal(calculations,0);assert.equal(find('UI.Apply').hidden,true);
  await find('UI.Recalculate').onclick();assert.equal(calculations,1);assert.equal(service.getStatus().reviewed,false);assert.equal(find('UI.Apply').hidden,false);
  await find('UI.Discard').onclick();assert.equal(service.getStatus().reviewed,false);assert.equal(find('UI.Apply').hidden,true);

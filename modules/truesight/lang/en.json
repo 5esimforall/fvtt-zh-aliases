@@ -92,8 +92,6 @@
   "TRUESIGHT.UI.Before": "Before",
   "TRUESIGHT.UI.After": "After",
   "TRUESIGHT.UI.Dissolved": "This group will dissolve; its members remain independent.",
-  "TRUESIGHT.UI.PreviewHint": "Unapplied preview. Membership changes only after confirmation on this client.",
-  "TRUESIGHT.UI.CurrentHint": "Currently applied groups. Recalculation does not apply a review.",
   "TRUESIGHT.UI.Empty": "No review yet. Recalculate to create the first preview.",
   "TRUESIGHT.UI.NoResults": "No matching entries.",
   "TRUESIGHT.UI.Diff": "Added {added} · Merged {merged} · Split {split} · {groups} resulting groups",

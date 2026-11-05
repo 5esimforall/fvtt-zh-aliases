@@ -92,8 +92,6 @@
   "TRUESIGHT.UI.Before": "应用前",
   "TRUESIGHT.UI.After": "应用后",
   "TRUESIGHT.UI.Dissolved": "该组将解散，成员保持独立。",
-  "TRUESIGHT.UI.PreviewHint": "预览尚未应用。确认后才会更新本客户端的成员关系。",
-  "TRUESIGHT.UI.CurrentHint": "当前已应用的归组。重新计算不会立即改动审核。",
   "TRUESIGHT.UI.Empty": "尚未建立归组。点击「重新计算」生成首次预览。",
   "TRUESIGHT.UI.NoResults": "没有符合条件的条目。",
   "TRUESIGHT.UI.Diff": "新增 {added} · 合并 {merged} · 拆分 {split} · 应用后 {groups} 组",

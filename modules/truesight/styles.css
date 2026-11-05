@@ -101,3 +101,5 @@
 .truesight-review .ts-review details[open] > summary::before { transform:rotate(90deg); }
 
 .truesight-review .ts-toolbar > .ts-tabs { margin-right:auto; flex:0 0 auto; flex-wrap:nowrap; }
+
+.truesight-review .ts-message:empty { display:none; }

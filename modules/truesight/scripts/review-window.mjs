@@ -60,7 +60,7 @@ export function reviewWindowClass() {
    const render=()=>{
     const isPreview=mode==='preview'&&preview;current.setAttribute('aria-pressed',String(!isPreview));pending.setAttribute('aria-pressed',String(Boolean(isPreview)));
     apply.hidden=discard.hidden=!isPreview;
-    message.textContent=isPreview?t('UI.PreviewHint'):t(view?.reviewed?'UI.CurrentHint':'UI.Empty');
+    message.textContent='';
     const focusedRow=document.activeElement?.getAttribute?.('data-row-key');
     list.replaceChildren();if(!view){detail.replaceChildren();summary.textContent='';prev.disabled=next.disabled=true;refreshActions();return;}
     const rows=reviewRows(view,isPreview?preview:null);
@@ -71,7 +71,7 @@ export function reviewWindowClass() {
     page=Math.max(0,Math.min(page,Math.ceil(visible.length/50)-1));const slice=visible.slice(page*50,page*50+50);
     if(!slice.some(r=>r.key===selected))selected=slice[0]?.key;
     for(const row of slice){const b=button('UI.Select',()=>{selected=row.key;render();});b.className='ts-row';b.setAttribute('data-row-key',row.key);b.setAttribute('aria-pressed',String(selected===row.key));b.title=row.name;b.replaceChildren(node('strong',row.name),node('span',[row.rules,t('UI.Members',{count:row.members.length}),isPreview?t('UI.Change.'+row.change):row.risk?'⚠':''].filter(Boolean).join(' · ')));list.append(b);if(focusedRow===row.key)b.focus();}
-    if(!slice.length)list.append(node('p',t('UI.NoResults')));
+    if(!slice.length)list.append(node('p',t(!view.reviewed&&!isPreview&&filter==='all'&&!search.value?'UI.Empty':'UI.NoResults')));
     prev.disabled=page===0;next.disabled=(page+1)*50>=visible.length;pageLabel.textContent=`${page+1} / ${Math.max(1,Math.ceil(visible.length/50))}`;
     summary.textContent=isPreview?t('UI.Diff',preview.diff):t('UI.Revision',{revision:view.revision,groups:view.groups.size});
     showDetail(slice.find(r=>r.key===selected));refreshActions();
