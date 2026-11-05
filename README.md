@@ -1,12 +1,12 @@
-# 真实视觉 · Truesight 与中文适配
+# 中文自动化名称适配
 
-角色卡可以保留「迷踪步」「不屈」，也可以写完整双语名。这个工作区提供一个共享条目聚类／名称解析基座和两个适配插件，让 CPR Medkit 按有证据的英文名查找 CPR、GPS 自动化；物品显示名保持原样，是否应用候选仍由使用者决定。
+角色卡可以保留「迷踪步」「不屈」，也可以写完整双语名。这个工作区提供两个适配插件，依赖同级 [Truesight 项目](../truesight/README.md) 的共享条目聚类／名称解析基座，让 CPR Medkit 按有证据的英文名查找 CPR、GPS 自动化；物品显示名保持原样，是否应用候选仍由使用者决定。
 
-## 三个插件
+## 两个适配插件与共享依赖
 
 | 插件目录 / Foundry ID | 职责 | 必需依赖 |
 | --- | --- | --- |
-| `modules/truesight` / `truesight` | 聚类条目、解析来源、保存审核关系、整理名称证据与消歧 | Quick Insert |
+| `../truesight/module` / `truesight` | 聚类条目、解析来源、保存审核关系、整理名称证据与消歧 | Quick Insert |
 | `modules/cpr-zh-aliases` / `cpr-zh-aliases` | 注册 CPR 自有自动化的名称映射 | 基座、CPR |
 | `modules/gps-zh-aliases` / `gps-zh-aliases` | 补充 CPR Medkit 中的 GPS 中文名查找 | 基座、CPR、Gambit’s Premades |
 
@@ -16,12 +16,12 @@
 
 ## 安装与使用
 
-1. 运行 `npm run package`，取得三个独立 ZIP；也可以直接复制 `modules/` 下需要的插件目录。
+1. 在本项目运行 `npm run package`，取得两个适配插件 ZIP；在同级 `truesight` 项目运行 `npm run package`，取得基座 ZIP。也可以复制各项目的可安装模块源码目录，并按模块 ID 命名安装目录。
 2. 将 `truesight` 和所需适配插件的文件夹放入 Foundry 用户数据的 `Data/modules/`。每个目录中的 `module.json` 必须直接位于该目录内。若只用 GPS 名称支持，无需安装 CPR 中文别名适配插件。
 3. 重启 Foundry 服务发现新模块，在世界中启用基座、所需适配插件及表中依赖，重新载入客户端。GM 与玩家不必各自运行宏。
 4. 打开物品的 CPR Medkit。CPR 可用 `Misty Step` 对照「迷踪步」及双语名；GPS 可用 `Indomitable` 对照「不屈」及双语名。保持物品类型和规则代际相同，并在 CPR 的自动化来源配置中启用 GPS。
 
-首次使用、存储范围和完整 API 见 [Truesight 使用说明](modules/truesight/README.md)。打包不会安装或启用插件。
+首次使用、存储范围和完整 API 见 [Truesight 使用说明](../truesight/module/README.md)。打包不会安装或启用插件。
 
 停用某个适配插件并重新载入，即可撤去该来源的新增查找支持；已经应用到角色卡的自动化不受影响。索引和译表按快照读取；Truesight 审核或索引变更会触发重建，更换外部译表或 CPR 合集配置后可显式刷新或重新载入；若载入期间已打开 Medkit，待初始化完成后重新打开。物品在本次快照后改名或新增时，也可能需要重新载入。
 
@@ -76,19 +76,19 @@ game.modules.get("gps-zh-aliases").api.stop();
 
 ## 开发与验证
 
-[设计](DESIGN.md) 描述目标体验；[协作约定](AGENTS.md) 规定开发要求；[架构说明](docs/architecture.md) 记录三个插件的接口和生命周期；[评估目录](docs/evaluations/) 保存观察证据。
+[设计](DESIGN.md) 描述目标体验；[协作约定](AGENTS.md) 规定开发要求；[架构说明](docs/architecture.md) 记录适配插件的接口和生命周期；[评估目录](docs/evaluations/) 保存观察证据。
 
 ```text
 modules/
-  truesight/   # 可安装的共享基座
   cpr-zh-aliases/    # 可安装的 CPR 适配插件
   gps-zh-aliases/    # 可安装的 GPS 适配插件
   # 每个目录都有自己的 module.json 和 scripts/
-  # truesight 另有公开 api-v1.mjs；catalog 与 names 在内部单向分层
-tests/              # 核心、适配、生命周期、打包及可选本机源码回放
-tools/             # 检查和三插件发行工具
+tests/              # 适配、生命周期、打包及可选本机源码回放
+tools/             # 检查和独立插件发行工具
 docs/              # 架构与评估记录
 ```
+
+集成测试需要同级 `../truesight/module/` 源码；本项目不打包或复制基座。基座的独立测试、检查与打包在其项目内执行。
 
 使用 Node.js 22 或以上版本，无需安装 npm 依赖；打包及打包测试使用系统 `zip`、`unzip`。
 
@@ -109,6 +109,5 @@ CPR_MODULES_DIR="$modules" npm test
 
 当前打包输出为：
 
-- `dist/truesight-v0.1.3.zip`
 - `dist/cpr-zh-aliases-v0.3.1.zip`
 - `dist/gps-zh-aliases-v0.3.1.zip`

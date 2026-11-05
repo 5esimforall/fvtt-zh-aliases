@@ -1,4 +1,4 @@
-import {core} from '../modules/truesight/scripts/names/api.mjs';
+import {core} from '../../truesight/module/scripts/names/api.mjs';
 // Opt-in replay against a trusted local CPR installation. Execute only the lookup
 // functions, with small in-memory packs. Never start Foundry or open a world DB.
 import test from 'node:test';
@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import vm from 'node:vm';
 import { activate } from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
-import { TRANSLATION_MODULE } from '../modules/truesight/scripts/names/translations.mjs';
+import { TRANSLATION_MODULE } from '../../truesight/module/scripts/names/translations.mjs';
 
 const modules = process.env.CPR_MODULES_DIR;
 test('installed CPR resolves the real translation spellings to the English control document', {

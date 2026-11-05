@@ -1,10 +1,10 @@
-import {connectCatalog} from '../modules/truesight/scripts/catalog/api.mjs';
-import {core} from '../modules/truesight/scripts/names/api.mjs';
+import {connectCatalog} from '../../truesight/module/scripts/catalog/api.mjs';
+import {core} from '../../truesight/module/scripts/names/api.mjs';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activate } from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
-import { BASE_ITEM_PACKS } from '../modules/truesight/scripts/names/translations.mjs';
+import { BASE_ITEM_PACKS } from '../../truesight/module/scripts/names/translations.mjs';
 
 function client() {
   const calls = [], table = {}, docs = [
@@ -131,7 +131,7 @@ test('a conflicting CPR flag on a non-CPR member blocks all its siblings without
 });
 
 test('missing or incompatible catalog never masquerades as an empty grouping result', async () => {
-  const {loadGrouping} = await import('../modules/truesight/scripts/names/groups.mjs');
+  const {loadGrouping} = await import('../../truesight/module/scripts/names/groups.mjs');
   const env = client();
   connectCatalog(null);
   let r = await activate({...env,loadGrouping});

@@ -7,11 +7,10 @@ import {join, resolve, relative} from 'node:path';
 import {readModules, files, root} from '../tools/workspace.mjs';
 import {packageModules} from '../tools/package.mjs';
 
-test('three installable modules have an optional-translation provider-independent foundation and independent adapter dependencies', async () => {
+test('two adapters depend on the independent Truesight foundation', async () => {
   const modules = await readModules();
-  assert.deepEqual(modules.map(m => m.manifest.id), ['cpr-zh-aliases', 'gps-zh-aliases', 'truesight']);
+  assert.deepEqual(modules.map(m => m.manifest.id), ['cpr-zh-aliases', 'gps-zh-aliases']);
   const dependencies = Object.fromEntries(modules.map(({manifest: m}) => [m.id, m.relationships.requires.map(r => r.id)]));
-  assert.deepEqual(dependencies['truesight'], ['quick-insert']);
   assert.deepEqual(dependencies['cpr-zh-aliases'], ['truesight', 'chris-premades']);
   assert.deepEqual(dependencies['gps-zh-aliases'], ['truesight', 'chris-premades', 'gambits-premades']);
   for (const {directory, manifest} of modules) {
@@ -24,7 +23,6 @@ test('three installable modules have an optional-translation provider-independen
         assert.ok(!relative(directory, target).startsWith('..'), 'Cross-plugin source import: ' + path);
         await readFile(target);
       }
-      if (manifest.id === 'truesight' && path.includes('/names/')) assert.doesNotMatch(content, /chris-premades|gambits-premades|renamedItems|cprNames/);
     }
   }
   assert.equal(JSON.parse(await readFile(join(root, 'package.json'))).name, 'fvtt-zh-aliases');
@@ -35,7 +33,7 @@ test('each ZIP contains its own manifest and runtime without relying on the repo
   t.after(() => rm(out, {recursive: true, force: true}));
   const archives = await packageModules(out);
   const modules = await readModules();
-  assert.equal(archives.length, 3);
+  assert.equal(archives.length, 2);
   for (const [i, {manifest}] of modules.entries()) {
     const archive = archives[i];
     const listing = execFileSync('unzip', ['-Z1', archive], {encoding: 'utf8'}).trim().split('\n');

@@ -1,8 +1,8 @@
-import {connectCatalog} from '../modules/truesight/scripts/catalog/api.mjs';
+import {connectCatalog} from '../../truesight/module/scripts/catalog/api.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {core} from '../modules/truesight/scripts/names/api.mjs';
-import {BASE_ITEM_PACKS} from '../modules/truesight/scripts/names/translations.mjs';
+import {core} from '../../truesight/module/scripts/names/api.mjs';
+import {BASE_ITEM_PACKS} from '../../truesight/module/scripts/names/translations.mjs';
 import {activate} from '../modules/gps-zh-aliases/scripts/runtime.mjs';
 import {installLookupFallback} from '../modules/gps-zh-aliases/scripts/lookup.mjs';
 import {activate as activateCPR} from '../modules/cpr-zh-aliases/scripts/runtime.mjs';

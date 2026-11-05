@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import vm from 'node:vm';
-import {core} from '../modules/truesight/scripts/names/api.mjs';
+import {core} from '../../truesight/module/scripts/names/api.mjs';
 import {activate} from '../modules/gps-zh-aliases/scripts/runtime.mjs';
 
 const modules = process.env.CPR_MODULES_DIR;
