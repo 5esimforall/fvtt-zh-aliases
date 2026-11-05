@@ -2,7 +2,7 @@
   "id": "gps-zh-aliases",
   "title": "GPS 中文别名 · Chinese Names for GPS",
   "description": "在 CPR Medkit 中按中文名查找 Gambit 自动化。 Chinese-name lookup for Gambit automation in CPR Medkit.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "compatibility": {
     "minimum": "13",
     "verified": "13",
@@ -23,7 +23,7 @@
         "id": "truesight",
         "type": "module",
         "compatibility": {
-          "minimum": "0.1.0"
+          "minimum": "0.1.7"
         }
       },
       {

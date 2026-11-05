@@ -194,7 +194,7 @@ test('GPS entry point starts on a non-GM client without the CPR alias adapter an
     ...['chris-premades', 'gambits-premades'].map(id => [id, {active: true}])]);
   self.active = true;
   modules.set('dnd-simplified-chinese-babele-patch', {active:true});
-  connectCatalog({whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
+  connectCatalog({getStatus:()=>({status:'unreviewed'}),whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
   const dependencies = {Hooks: {once: (event, cb) => events.set(event, cb), on: (event, cb) => events.set(event, cb), off: event => events.delete(event)},
     game: {modules, packs: env.packs, user: {isGM: false}, i18n: {localize: key => key}},
     CONFIG: {}, chrisPremades: env.cpr, location: {href: 'http://localhost/table/game'},
@@ -241,4 +241,16 @@ test('both adapters share evidence but keep provider output and disabling indepe
   assert.equal(env.compendiumUtils.getAllAutomations, original);
   assert.equal(renamedItems.迷踪步, 'Misty Step');
   assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('不屈')), []);
+});
+
+
+test('GPS refresh bursts share one in-flight task and only publish the latest scoped plans', async () => {
+  const env=client();let calls=0,plans=0,release;
+  const loadCorpus=async()=>{calls++;if(calls===2)await new Promise(resolve=>{release=resolve;});return env.loadCorpus();};
+  const api=await activate({...env,loadCorpus,core:{...core,planAliases:args=>{plans++;return core.planAliases(args);}}});
+  const initialPlans=plans;
+  const burst=Array.from({length:40},()=>api.refresh());
+  while(!release)await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,2);
+  for(let i=0;i<40;i++)burst.push(api.refresh());release();await Promise.all(burst);
+  assert.equal(calls,3);assert.equal(plans,initialPlans*2);assert.equal(api.report.status,'ready');api.stop();
 });

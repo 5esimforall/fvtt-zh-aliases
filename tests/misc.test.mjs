@@ -28,7 +28,7 @@ function client() {
   const compendiumUtils = {getAllAutomations: native, getMISCAutomation: async () => {}};
   const cpr = {utils: {compendiumUtils, constants: {itemTypes}, genericUtils: {getCPRSetting: key => settings[key]}}};
   const localItems = [];
-  const loadCorpus = async () => ({...await core.readCorpus({packs, localItems, loadTitleIndex: async () => titleIndex,
+  const loadCorpus = async () => ({...await core.readCorpus({packs, localItems, fields: ['folderId'], loadTitleIndex: async () => titleIndex,
     loadGrouping: () => items => new Map(items.map(i => [i.uuid, {key: null}]))}),
     miscCatalog: {folders: new Map([['midi-item-showcase-community.misc-homebrew', new Map([['Items', 'items']])]])}});
   return {core, cpr, loadCorpus, packs, titleIndex, settings, calls, docs, compendiumUtils, native, localItems};
@@ -196,7 +196,7 @@ test('MISC entry point starts on a non-GM client without the CPR alias adapter a
     ...['chris-premades', 'midi-item-showcase-community'].map(id => [id, {active: true}])]);
   self.active = true;
   modules.set('dnd-simplified-chinese-babele-patch', {active:true});
-  connectCatalog({whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
+  connectCatalog({getStatus:()=>({status:'unreviewed'}),whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
   const dependencies = {Hooks: {once: (event, cb) => events.set(event, cb), on: (event, cb) => events.set(event, cb), off: event => events.delete(event)},
     game: {modules, packs: env.packs, user: {isGM: false}, i18n: {localize: key => key}},
     CONFIG: {}, chrisPremades: env.cpr, location: {href: 'http://localhost/table/game'},
@@ -309,4 +309,16 @@ test('MISC catalog follows its modes, factory exclusions, pack editions and UA f
   assert.deepEqual(names(4, '2014', 'spell'), ['UA Legacy Spell']);
   packs.get(prefix + 'misc-homebrew').visible = false;
   assert.equal(catalogContext(packs, automations).folders.has(prefix + 'misc-homebrew'), false);
+});
+
+
+test('MISC refresh bursts share one in-flight task and only publish the latest scoped plans', async () => {
+  const env=client();let calls=0,plans=0,release;
+  const loadCorpus=async()=>{calls++;if(calls===2)await new Promise(resolve=>{release=resolve;});return env.loadCorpus();};
+  const api=await activate({...env,loadCorpus,core:{...core,planAliases:args=>{plans++;return core.planAliases(args);}}});
+  const initialPlans=plans;
+  const burst=Array.from({length:40},()=>api.refresh());
+  while(!release)await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,2);
+  for(let i=0;i<40;i++)burst.push(api.refresh());release();await Promise.all(burst);
+  assert.equal(calls,3);assert.equal(plans,initialPlans*2);assert.equal(api.report.status,'ready');api.stop();
 });

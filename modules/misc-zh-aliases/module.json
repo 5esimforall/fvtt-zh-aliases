@@ -2,7 +2,7 @@
   "id": "misc-zh-aliases",
   "title": "MISC 中文别名 · Chinese Names for MISC",
   "description": "在 CPR Medkit 中按中文名查找 Midi Item Showcase Community 自动化。 Chinese-name lookup for MISC automation in CPR Medkit.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "compatibility": {
     "minimum": "13",
     "verified": "13",
@@ -23,7 +23,7 @@
         "id": "truesight",
         "type": "module",
         "compatibility": {
-          "minimum": "0.1.0"
+          "minimum": "0.1.7"
         }
       },
       {

@@ -3,7 +3,7 @@ import {installLookupFallback} from './lookup.mjs';
 
 export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
   const api = {report: {provider: 'misc', status: 'loading'}};
-  if (core?.apiVersion !== 1) {
+  if (core?.apiVersion !== 1 || typeof core.createRefreshQueue !== 'function') {
     api.report.status = 'unsupported-core';
     return api;
   }
@@ -14,7 +14,7 @@ export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
     api.report.status = 'unsupported-misc-entry';
     return api;
   }
-  let state, stop, generation = 0;
+  let state, stop;
   function plan(mode, scope) {
     const key = JSON.stringify([mode, scope.rules, scope.type]);
     if (!state.plans.has(key)) {
@@ -28,6 +28,7 @@ export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
     return state.plans.get(key);
   }
   function resolve(item, options) {
+    if (state?.corpus.isCurrent?.() === false) state = null;
     if (!state || !/\p{Script=Han}/u.test(item.name)) return null;
     const enabledSources = utils.genericUtils.getCPRSetting('additionalCompendiums');
     if (!Object.hasOwn(enabledSources ?? {}, 'midi-item-showcase-community')) return null;
@@ -36,20 +37,19 @@ export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
     const mode = utils.genericUtils.getCPRSetting('miscPremades');
     return plan(mode, scope).aliases.get(item.name) ?? null;
   }
-  api.refresh = () => {
-    const current = ++generation;
-    state = null;
-    api.report = {provider: 'misc', status: 'loading'};
-    return (async () => {
+  const queue = core.createRefreshQueue({
+    invalidate: () => { state = null; api.report = {provider: 'misc', status: 'loading'}; },
+    build: async isCurrent => {
       try {
         const corpus = await loadCorpus();
+        if (!isCurrent() || corpus.isCurrent?.() === false) return;
         let groups;
         try {
           groups = core.itemGroups(corpus.indexes, corpus.catalogFor, corpus.localItems);
         } catch (error) {
           throw Object.assign(new Error('Grouping unavailable', {cause: error}), {source: 'truesight'});
         }
-        if (current !== generation) return api.report;
+        if (!isCurrent() || corpus.isCurrent?.() === false) return;
         state = {corpus, groups, plans: new Map()};
         api.report = {provider: 'misc', status: 'ready', grouping: 'truesight', scopes: []};
         // Validate every dictionary before enabling any fallback. Plans remain
@@ -65,16 +65,16 @@ export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
           api.report = {provider: 'misc', status: 'unsupported-misc-entry'};
         }
       } catch (error) {
-        if (current === generation) {
+        if (isCurrent()) {
           state = null;
           api.report = {provider: 'misc', ...core.sourceError(error)};
         }
       }
-      return api.report;
-    })();
-  };
+    }
+  });
+  api.refresh = async () => { await queue.request(); return api.report; };
   api.stop = () => {
-    generation++;
+    queue.stop();
     state = null;
     stop?.();
     stop = null;

@@ -62,6 +62,7 @@ export async function activate({core, cpr, renamedItems, packs, loadCorpus, isCu
     if (!sources.size) return {provider, status: 'no-visible-candidates'};
     const corpus = await (loadCorpus ? loadCorpus({fields: CPR_FIELDS})
       : core.readCorpus({packs, ...corpusOptions, fields: CPR_FIELDS}));
+    if (!isCurrent() || corpus.isCurrent?.() === false) return {provider, status: 'superseded'};
     const names = lookupNames(sources, corpus.indexes);
     if (!names.size) return {provider, status: 'no-visible-candidates'};
     const pairs = core.collectNamePairs(corpus.sources, corpus.titleIndex, names, extraTranslations);
@@ -73,7 +74,7 @@ export async function activate({core, cpr, renamedItems, packs, loadCorpus, isCu
     }
     // CPR's single exact-key table requires agreement across types and editions.
     const {aliases, report} = core.planAliases({pairs, lookupNames: names, existingAliases: renamedItems, groups});
-    if (!isCurrent()) return {provider, status: 'superseded'};
+    if (!isCurrent() || corpus.isCurrent?.() === false) return {provider, status: 'superseded'};
     let registered = 0;
     for (const [displayName, lookupName] of aliases) {
       if (displayName in renamedItems) continue;
@@ -91,20 +92,25 @@ export async function activate({core, cpr, renamedItems, packs, loadCorpus, isCu
  * cannot publish names based on a superseded review. */
 export function createController(options) {
   const owned = new Map();
-  let generation = 0;
   const api = {report: {provider: 'cpr', status: 'loading'}};
   const clear = () => {
     for (const [key, value] of owned) if (options.renamedItems?.[key] === value) delete options.renamedItems[key];
     owned.clear();
   };
-  api.refresh = async () => {
-    const current = ++generation;
-    clear(); api.report = {provider: 'cpr', status: 'loading'};
-    const report = await activate({...options, isCurrent: () => current === generation,
-      onRegister: (key, value) => owned.set(key, value)});
-    if (current === generation) api.report = report;
-    return api.report;
-  };
-  api.stop = () => { generation++; clear(); api.report = {provider: 'cpr', status: 'stopped'}; };
+  if (typeof options.core?.createRefreshQueue !== 'function') {
+    api.refresh = async () => (api.report = {provider: 'cpr', status: 'unsupported-core'});
+    api.stop = () => { clear(); api.report = {provider: 'cpr', status: 'stopped'}; };
+    return api;
+  }
+  const queue = options.core.createRefreshQueue({
+    invalidate: () => { clear(); api.report = {provider: 'cpr', status: 'loading'}; },
+    build: async isCurrent => {
+      const report = await activate({...options, isCurrent,
+        onRegister: (key, value) => owned.set(key, value)});
+      if (isCurrent()) api.report = report;
+    }
+  });
+  api.refresh = async () => { await queue.request(); return api.report; };
+  api.stop = () => { queue.stop(); clear(); api.report = {provider: 'cpr', status: 'stopped'}; };
   return api;
 }

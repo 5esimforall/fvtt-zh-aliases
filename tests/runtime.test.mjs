@@ -92,7 +92,7 @@ test('additional visible Item sources can reveal conflicts; Actor, hidden pack a
 
 test('Foundry entry point waits for cprReady on a non-GM client and uses the configured route', async t => {
   const env = client(), events = new Map(), self = {};
-  connectCatalog({whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
+  connectCatalog({getStatus:()=>({status:'unreviewed'}),whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
   const deps = {
     Hooks: {once: (event, callback) => events.set(event, callback), on: (event, cb) => events.set(event, cb), off: event => events.delete(event)},
     game: {user: {isGM: false}, modules: new Map([['truesight', {active:true,api:{apiVersion:1,names:core}}], ['cpr-zh-aliases', self], ['dnd-simplified-chinese-babele-patch', {active:true}]]), packs: env.packs},
@@ -136,7 +136,7 @@ test('missing or incompatible catalog never masquerades as an empty grouping res
   connectCatalog(null);
   let r = await activate({...env,loadGrouping});
   assert.equal(r.status,'source-error'); assert.equal(r.source,'truesight');
-  connectCatalog({whenReady:async()=>{},read:()=>({apiVersion:99,status:'ready',entries:new Map()})});
+  connectCatalog({getStatus:()=>({status:'unreviewed'}),whenReady:async()=>{},read:()=>({apiVersion:99,status:'ready',entries:new Map()})});
   r = await activate({...env,loadGrouping});
   assert.equal(r.status,'source-error'); assert.equal(r.source,'truesight');
   assert.deepEqual(env.renamedItems,{});
@@ -158,4 +158,16 @@ test('CPR refresh withdraws only owned aliases and rejects late asynchronous pub
   while(!release) await new Promise(resolve=>setTimeout(resolve,0));
   slow.stop(); release(await env.loadTitleIndex());
   await pending; assert.equal(slow.report.status,'stopped');
+});
+
+test('CPR coalesces refresh bursts and supersedes an in-flight build without publishing its plan', async () => {
+  const {createController} = await import('../modules/cpr-zh-aliases/scripts/runtime.mjs');
+  const env=client();let calls=0,plans=0,release;
+  const loadCorpus=async()=>{calls++;if(calls===2)await new Promise(resolve=>{release=resolve;});return core.readCorpus(env);};
+  const api=createController({...env,loadCorpus,core:{...core,planAliases:args=>{plans++;return core.planAliases(args);}}});
+  await api.refresh();assert.equal(env.renamedItems.迷踪步,'Misty Step');
+  const burst=Array.from({length:40},()=>api.refresh());assert.equal(env.renamedItems.迷踪步,undefined);
+  while(!release)await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,2);
+  for(let i=0;i<40;i++)burst.push(api.refresh());release();await Promise.all(burst);
+  assert.equal(calls,3);assert.equal(plans,2);assert.equal(env.renamedItems.迷踪步,'Misty Step');api.stop();
 });
