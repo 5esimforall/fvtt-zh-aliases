@@ -11,7 +11,10 @@ Hooks.once('cprReady', async () => {
   game.modules.get(id).api = api;
   const refresh = api.refresh, stop = api.stop;
   const hooks = Hooks;
-  const hook = hooks.on('truesightChanged', () => { if (game.modules.get(id)?.active) void refresh(); });
+  const hook = hooks.on('truesightChanged', change => {
+    if (core?.affects && !core.affects(change, ['names', 'identity', 'access', 'review', 'sources'])) return;
+    if (game.modules.get(id)?.active) void refresh();
+  });
   api.stop = () => { hooks.off('truesightChanged', hook); stop(); };
   await refresh();
   if (api.report.status !== 'ready') console.warn(id, api.report);

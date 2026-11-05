@@ -9,7 +9,8 @@ Hooks.once('cprReady', async () => {
   const core = foundation?.active && foundation.api?.apiVersion === 1 ? foundation.api.names : null;
   let api, changedDuringLoad = false;
   const hooks = Hooks;
-  const hook = hooks.on('truesightChanged', () => {
+  const hook = hooks.on('truesightChanged', change => {
+    if (core?.affects && !core.affects(change, ['names', 'identity', 'access', 'review', 'sources'])) return;
     if (!game.modules.get(id)?.active) return;
     if (api?.refresh) void api.refresh(); else changedDuringLoad = true;
   });
