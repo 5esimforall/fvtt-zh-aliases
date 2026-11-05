@@ -6,7 +6,7 @@
 
 | 插件 | 输入 | 输出与外部副作用 |
 | --- | --- | --- |
-| `truesight` | Quick Insert 可见索引、来源、客户端审核、可选译表与原名、适配层候选 | 审核成员关系、只读名称快照、计划与诊断；仅保存自身客户端审核 |
+| `truesight` | Quick Insert 可见索引、来源、世界共享审核、可选译表与原名、适配层候选 | 审核成员关系、只读名称快照、计划与诊断；GM 管理世界共享审核，消费端按原生权限读取结果 |
 | `cpr-zh-aliases` | 基座快照、CPR 配置与宏名称、既有映射 | 将完整计划中的新增名称写入本客户端 `CONFIG.chrisPremades.renamedItems` |
 | `gps-zh-aliases` | 基座快照、GPS 合集目录、CPR 的 GPS 集成模式 | 向共享查询路由注册 GPS 名称解析，仅补回缺少的 GPS 候选 |
 | `misc-zh-aliases` | 基座快照、MISC 合集目录、文件夹与 factory 配置、CPR 的 MISC 集成模式 | 向同一路由注册 MISC 名称解析，仅补回缺少的 MISC 候选 |
