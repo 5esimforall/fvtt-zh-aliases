@@ -26,18 +26,15 @@ export function sourceContext(item, environment = {}) {
   const pkg = metadata?.packageType === "system" ? environment.system : metadata?.packageType === "world" ? environment.world
     : environment.modules?.get(metadata?.packageName);
   const source = item.system?.source;
-  const oldSource = item.system?.details?.source;
   const data = source && typeof source === "object" ? source : {};
-  const oldData = oldSource && typeof oldSource === "object" ? oldSource : {};
   const books = Object.keys(pkg?.flags?.dnd5e?.sourceBooks ?? {});
   return {
     external, origin: external ? "external" : packId ? "compendium" : "world", packId,
     location: text(pack?.title) || text(metadata?.label) || text(item.packageName),
     packageName: text(pkg?.title) || text(metadata?.packageName),
-    book: text(data.book) || text(oldData.book), custom: text(data.custom) || text(oldData.custom), legacy: text(source) || text(oldSource),
-    externalSource: external ? text(item.source) : "", rules: generation(text(data.rules)) || generation(text(oldData.rules)),
-    legacyRulesConflict: Boolean(generation(text(data.rules)) && generation(text(oldData.rules)) && data.rules !== oldData.rules),
-    page: pageText(data.page) || pageText(oldData.page),
+    book: text(data.book), custom: text(data.custom),
+    externalSource: external ? text(item.source) : "", rules: generation(text(data.rules)),
+    page: pageText(data.page),
     packBook: text(metadata?.flags?.dnd5e?.sourceBook), packageBook: books.length === 1 ? books[0] : ""
   };
 }
@@ -53,10 +50,10 @@ export function identifySource(item, environment = {}) {
   const context = sourceContext(item, prepared);
   const { external, rules, page } = context;
   const parse = value => parseCitations(value, catalog, { external });
-  const book = parse(context.book), custom = parse(context.custom || context.legacy);
+  const book = parse(context.book), custom = parse(context.custom);
   const pack = parse(context.packBook), pkg = parse(context.packageBook);
   const bookKnown = known(book), customKnown = known(custom);
-  let citations = [], unresolved = [], basis = "document", conflict = context.legacyRulesConflict ? "edition-conflict" : null;
+  let citations = [], unresolved = [], basis = "document", conflict = null;
 
   if (external) {
     citations = parse(context.externalSource);
@@ -81,7 +78,7 @@ export function identifySource(item, environment = {}) {
     // in the tooltip but does not hide a valid structured source.book.
     citations = book;
   } else {
-    const explicit = context.book || context.custom || context.legacy;
+    const explicit = context.book || context.custom;
     const implementation = isVersionNumber(explicit) || /^(?:[\p{L}\s_-]+\s*)?v?\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/u.test(explicit)
       || [context.location, context.packageName, context.packId].some(value => value && publicationKey(value) === publicationKey(explicit));
     if (!explicit || implementation) {
@@ -125,7 +122,7 @@ export function identifySource(item, environment = {}) {
     rules: conflict === "edition-conflict" ? null : rules || (editions.length === 1 ? editions[0] : null),
     documentRules: rules,
     raw: [
-      ["book", context.book], ["custom", context.custom], ["legacy", context.legacy],
+      ["book", context.book], ["custom", context.custom],
       ["external", context.externalSource], ["pack", context.packBook], ["package", context.packageBook]
     ].filter(([, value]) => value).map(([field, value]) => ({ field, value }))
   };

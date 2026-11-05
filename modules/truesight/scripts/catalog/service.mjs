@@ -1,6 +1,6 @@
 import {buildGroupingCatalog, calculateGrouping, canonicalUuid, groupingDiff, GROUP_RULE_VERSION} from './identity.mjs';
 import {identifySource, prepareSourceEnvironment} from './source-resolution.mjs';
-import {emptyReview, readReview, validSnapshot} from './state.mjs';
+import {emptyReview, readReview} from './state.mjs';
 
 export class CatalogError extends Error {
   constructor(code, message = code) { super(message); this.name = 'CatalogError'; this.code = code; this.source = 'truesight'; }
@@ -13,8 +13,8 @@ const stable = snapshot => JSON.stringify({
 /** Shared client review. Dependencies are injected so the algorithm can be
  * tested without Foundry, Quick Insert, a search panel or any name resolver. */
 export class CatalogService {
-  constructor({index, environment, load, save, notify = () => {}, legacy = () => null}) {
-    Object.assign(this, {index, environment, save, notify, legacy});
+  constructor({index, environment, load, save, notify = () => {}}) {
+    Object.assign(this, {index, environment, save, notify});
     this.generation = 0;
     this.previews = new Map();
     this.waiters = new Set();
@@ -109,22 +109,9 @@ export class CatalogService {
 
   getMember(uuid) { return this.read([uuid]).entries.get(canonicalUuid(uuid)); }
 
-  makeSnapshot({includeRisk = false, migration = null} = {}) {
-    const {results, environment, data} = this.current();
-    if (!migration) return calculateGrouping(results, environment, {excluded: this.state.excluded}, {includeRisk});
-    const old = validSnapshot(migration.active);
-    if (!old) throw new CatalogError('invalid-migration', 'No compatible Slow Insert review');
-    const excluded = Array.isArray(migration.preferences?.excluded) ? migration.preferences.excluded : [];
-    const valid = buildGroupingCatalog(results, environment, old, {excluded});
-    const next = {version: 1, ruleVersion: GROUP_RULE_VERSION, createdAt: Date.now(), includeRisk: old.includeRisk === true, records: {}, groups: {}};
-    for (const [key, members] of valid.groups) if (members.length > 1) next.groups[key] = {...old.groups[key], members: members.map(entry => entry.uuid).sort()};
-    for (const entry of data.entries.values()) if (entry.spell) {
-      const member = valid.entries.get(entry.uuid);
-      const key = member.key && next.groups[member.key] ? member.key : null;
-      next.records[entry.uuid] = {fingerprint: entry.fingerprint, nameFingerprint: key && next.groups[key].risk ? entry.nameFingerprint : null,
-        key, warning: member.warning};
-    }
-    return next;
+  makeSnapshot({includeRisk = false} = {}) {
+    const {results, environment} = this.current();
+    return calculateGrouping(results, environment, {excluded: this.state.excluded}, {includeRisk});
   }
 
   preview(options = {}) {
@@ -134,16 +121,10 @@ export class CatalogService {
     if (this.previews.size >= 8) this.previews.delete(this.previews.keys().next().value);
     this.previews.set(id, {snapshot, options: structuredClone(options), revision: this.state.revision});
     const names = new Map(this.index().results.map(({item}) => [canonicalUuid(item), item.name]));
-    return {id, ...this.getStatus(), migration: Boolean(options.migration), diff: groupingDiff(this.state.active, snapshot),
+    return {id, ...this.getStatus(), diff: groupingDiff(this.state.active, snapshot),
       groups: Object.entries(snapshot.groups).map(([key, group]) => ({key, ...group, members: group.members.map(uuid => ({uuid, name: names.get(uuid)}))})),
       independent: Object.entries(snapshot.records).filter(([, record]) => !record.key)
         .map(([uuid, record]) => ({uuid, name: names.get(uuid), reason: record.warning ?? 'no-match'}))};
-  }
-
-  previewMigration() {
-    const migration = this.legacy();
-    if (!migration?.active) throw new CatalogError('no-legacy', 'No old Slow Insert review to import');
-    return this.preview({migration});
   }
 
   async commit(active, excluded, previous = {active: this.state.active, excluded: this.state.excluded}, reason = 'review') {
@@ -179,10 +160,7 @@ export class CatalogService {
     if (!preview || preview.revision !== this.state.revision || stable(this.makeSnapshot(preview.options)) !== stable(preview.snapshot)) {
       throw new CatalogError('preview-stale', 'The index or review changed; preview again');
     }
-    const excluded = preview.options.migration ? (preview.options.migration.preferences?.excluded ?? []) : this.state.excluded;
-    // Migration never retains inaccessible old UUIDs in new client storage.
-    const permitted = new Set(this.index().results.map(({item}) => canonicalUuid(item)));
-    return this.commit(preview.snapshot, excluded.filter(id => permitted.has(id)), undefined, 'apply');
+    return this.commit(preview.snapshot, this.state.excluded, undefined, 'apply');
   }
 
   async undo() {

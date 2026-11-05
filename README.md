@@ -12,7 +12,7 @@
 
 两个适配插件互不依赖。GPS 适配仍依赖 CPR，因为当前接入点是 CPR Medkit；它不提供脱离 Medkit 的 GPS 宏执行兼容。基座不依赖 Slow Insert、中文汉化包、CPR 或 GPS，也不单独写入任何提供方的名称表。
 
-目标环境为 Foundry V13、dnd5e。本机源码回放核对的 CPR 为 1.5.49，GPS 为 2.1.44，简体中文 Babele 汉化包（`dnd-simplified-chinese-babele-patch`）为 1.0.202。Slow Insert 0.6.8 与两个适配共同消费 Truesight API v1。插件读取汉化包的标题索引，发行包不复制第三方译表。
+目标环境为 Foundry V13、dnd5e。本机源码回放核对的 CPR 为 1.5.49，GPS 为 2.1.44，简体中文 Babele 汉化包（`dnd-simplified-chinese-babele-patch`）为 1.0.202。Slow Insert 0.6.9 与两个适配共同消费 Truesight API v1。插件读取汉化包的标题索引，发行包不复制第三方译表。
 
 ## 安装与使用
 
@@ -21,7 +21,7 @@
 3. 重启 Foundry 服务发现新模块，在世界中启用基座、所需适配插件及表中依赖，重新载入客户端。GM 与玩家不必各自运行宏。
 4. 打开物品的 CPR Medkit。CPR 可用 `Misty Step` 对照「迷踪步」及双语名；GPS 可用 `Indomitable` 对照「不屈」及双语名。保持物品类型和规则代际相同，并在 CPR 的自动化来源配置中启用 GPS。
 
-旧 `zh-aliases-core` 已合并进 Truesight，应停用旧基座并同步更新两个适配。旧 Slow Insert 审核需要显式预览迁移；首次使用、存储范围和完整 API 见 [Truesight 使用说明](modules/truesight/README.md)。打包不会安装或启用插件。
+首次使用、存储范围和完整 API 见 [Truesight 使用说明](modules/truesight/README.md)。打包不会安装或启用插件。
 
 停用某个适配插件并重新载入，即可撤去该来源的新增查找支持；已经应用到角色卡的自动化不受影响。索引和译表按快照读取；Truesight 审核或索引变更会触发重建，更换外部译表或 CPR 合集配置后可显式刷新或重新载入；若载入期间已打开 Medkit，待初始化完成后重新打开。物品在本次快照后改名或新增时，也可能需要重新载入。
 
@@ -109,6 +109,6 @@ CPR_MODULES_DIR="$modules" npm test
 
 当前打包输出为：
 
-- `dist/truesight-v0.1.0.zip`
+- `dist/truesight-v0.1.1.zip`
 - `dist/cpr-zh-aliases-v0.3.1.zip`
 - `dist/gps-zh-aliases-v0.3.1.zip`

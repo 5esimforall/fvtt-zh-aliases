@@ -122,9 +122,7 @@ export function buildPublicationCatalog(environment = {}) {
   const packages = [environment.system, environment.world, ...values(environment.modules).filter(pkg => pkg.active !== false)].filter(Boolean);
   for (const pkg of packages) {
     declareMap(pkg.flags?.dnd5e?.sourceBooks);
-    // Existing package declarations remain readable during migration; new
-    // declarations belong to Truesight and take precedence as a whole.
-    const publications = pkg.flags?.truesight?.publications ?? pkg.flags?.["slow-insert"]?.publications;
+    const publications = pkg.flags?.truesight?.publications;
     if (Array.isArray(publications)) for (const record of publications) catalog.add(record);
   }
   declareMap(environment.sourceBooks);
@@ -132,7 +130,7 @@ export function buildPublicationCatalog(environment = {}) {
     const code = pack.metadata?.flags?.dnd5e?.sourceBook;
     if (typeof code === "string") catalog.declare(code, code);
   }
-  // Isolated compatibility bridge for 5etools-style published source catalogs.
+  // Adapter for the current 5etools-style published source catalog protocol.
   // Codes such as PHB are exact editions ONLY in this external-provider context.
   const external = environment.externalPublications;
   for (const [code, title] of Object.entries(external?.titles ?? {})) catalog.declare(code, title, {

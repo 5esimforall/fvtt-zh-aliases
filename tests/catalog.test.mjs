@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {CatalogService} from '../modules/truesight/scripts/catalog/service.mjs';
-import {calculateGrouping} from '../modules/truesight/scripts/catalog/identity.mjs';
 import {validSnapshot, reviewSettingKey} from '../modules/truesight/scripts/catalog/state.mjs';
 import {connectCatalog, catalog} from '../modules/truesight/scripts/catalog/api.mjs';
 import {loadGrouping, itemGroups} from '../modules/truesight/scripts/names/groups.mjs';
@@ -13,7 +12,7 @@ function fixture(options = {}) {
   const f = {...groupingFixture(), events: [], status: 'ready', saved: options.saved ?? null, failSave: false};
   f.service = new CatalogService({index: () => ({status:f.status, results:f.rows}), environment: () => f.environment,
     load: () => f.saved, save: async value => {if(f.failSave) throw Error('quota'); f.saved = value;},
-    notify: event => f.events.push(event), legacy: () => f.legacy});
+    notify: event => f.events.push(event)});
   f.apply = async () => f.service.apply(f.service.preview({includeRisk:true}).id);
   return f;
 }
@@ -94,25 +93,14 @@ test('public results are detached metadata; no document, search wrapper or funct
   assert.notEqual(f.service.getMember(uuid).key,'corrupted');assert.equal(f.service.read().groups.size,3);
 });
 
-test('denied members and their names/evidence disappear, including migration and group members', async () => {
+test('denied members and their names/evidence disappear from reads and saved reviews', async () => {
   const f = fixture(); await f.apply();
   const hidden=f.rows[0]; hidden.item.name='SECRET TITLE'; f.rows=f.rows.slice(1);
   const result=f.service.read();
   const text=JSON.stringify({entries:[...result.entries],groups:[...result.groups]});
   assert.ok(!text.includes(hidden.item.uuid));assert.ok(!text.includes('SECRET TITLE'));
-  f.legacy={active:f.saved.active,preferences:{excluded:[hidden.item.uuid]}};
-  await f.service.apply(f.service.previewMigration().id);
+  await f.apply();
   assert.ok(!JSON.stringify(f.saved).includes(hidden.item.uuid));
-});
-
-test('migration is explicit and cannot enlarge a previously approved group', async () => {
-  const f=fixture();f.legacy={version:2,active:calculateGrouping(f.rows,f.environment,{}, {includeRisk:true}),preferences:{pins:{any:'ignored'},enabled:false}};
-  const old=JSON.stringify(f.legacy);f.rows.push(spell('new'));
-  assert.equal(f.service.read().status,'unreviewed');
-  const preview=f.service.previewMigration();assert.equal(preview.migration,true);
-  await f.service.apply(preview.id);assert.equal(f.service.getMember(f.rows.at(-1).item.uuid).key,null);
-  assert.equal(f.service.read().groups.size,3);assert.equal(JSON.stringify(f.legacy),old);
-  assert.ok(!JSON.stringify(f.saved).includes('pins'));
 });
 
 test('identity exclusion is shared and undoable, not a browser preference', async () => {
@@ -177,15 +165,4 @@ test('name evidence works without a Chinese translation module and never fetches
   globalThis.fetch=()=>assert.fail('optional translation must not fetch');
   const corpus=await core.loadCorpus();assert.equal(corpus.indexes.size,0);assert.equal(corpus.titleIndex,null);
   assert.deepEqual(core.collectNamePairs(new Map(),corpus.titleIndex,new Set(),['provider.actions']),[]);
-});
-
-
-test('new declaration namespace takes precedence over old package source metadata', async () => {
-  const {sources} = await import('../modules/truesight/api-v1.mjs');
-  const catalog = sources.buildPublicationCatalog({modules:new Map([['provider',{flags:{
-    truesight:{publications:[{id:'new',title:'New Book',label:'NB'}]},
-    'slow-insert':{publications:[{id:'old',title:'Old Book',label:'OB'}]}
-  }}]])});
-  assert.equal(catalog.lookup('New Book')[0].id,'new');
-  assert.equal(catalog.lookup('Old Book').length,0);
 });

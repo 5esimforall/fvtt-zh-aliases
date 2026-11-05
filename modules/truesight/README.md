@@ -6,21 +6,11 @@ Truesight 对 Foundry 条目进行聚类，并利用已确认的成员关系汇�
 
 依赖 Quick Insert 3.7.8 或以上，不依赖 Slow Insert、中文汉化包、CPR 或 GPS。将发行包中的 `truesight` 目录安装到 `Data/modules`，启用后重新载入客户端。
 
-在「配置设置 → 真实视觉 · Truesight → 审核规则分组」打开管理窗口。点击「重新归组…」查看完整索引的候选，再点击「应用归组」。风险后缀归并默认关闭；预览、关闭窗口和普通索引刷新都不会发布成员关系。停用 Slow Insert 后，管理入口及中文适配仍可工作。
+在「配置设置 → 真实视觉 · Truesight → 审核规则分组」打开管理窗口。点击「重新归组…」查看完整索引的候选，再点击成员列表上方的「应用归组」。风险后缀归并默认关闭；预览、关闭窗口和普通索引刷新都不会发布成员关系。停用 Slow Insert 后，管理入口及中文适配仍可工作。
 
 审核按**当前世界、当前用户、当前浏览器客户端**保存。它不是 GM 发布的世界级审核，不会同步到其他浏览器。所有消费者在同一客户端使用同一份审核修订。每次写入保留一层撤销；撤销恢复成员关系与身份排除，不改变 Slow Insert 的首选或浏览偏好。
 
 新增条目先独立；已删除或不可访问的成员不返回；身份字段变化的成员失效。仅改显示译名不会单独使普通分组失效。算法沿用 Slow Insert 0.6.7 的判定：同规则代际、有效 identifier、环阶和学派一致形成候选；可选风险规则允许来源印证的完整英文书目后缀。2014 与 2024 分开。算法不读取名称解析结果来证明身份。
-
-## 从旧插件迁移
-
-1. 同时升级 Slow Insert 0.6.8、CPR/GPS 适配 0.3.1，并安装 Truesight 0.1.0。
-2. 停用旧 `zh-aliases-core`，启用 Truesight。旧插件已退出依赖关系，不应和新适配混搭。旧安装目录可以留存但不启用。
-3. 在原来保存审核的浏览器及世界中打开 Truesight，选择「迁入旧 Slow Insert 快照…」，检查后应用。
-4. 只迁入仍有效、仍可访问的旧成员；新增条目不会借迁移入组。旧手动排除按原有的身份排除语义迁入。旧快照不会被删除或自动提升为共享世界数据。
-5. Slow Insert 自动读取原首选作为浏览偏好的初值；迁移审核、撤销审核和改变首选彼此独立。
-
-客户端审核不在 Git 内；更新前需要保留客户端存储，或通过浏览器另行备份。代码可通过 Git/发行包回退。本次迁移不写世界数据。
 
 ## API v1
 
@@ -46,12 +36,12 @@ const member = catalog.getMember('Compendium.package.pack.Item.id');
 
 ### 审核与扩展
 
-- `preview({includeRisk})` / `previewMigration()`：生成本客户端预览，返回预览 `id`、差异、成员和独立条目。
+- `preview({includeRisk})`：生成本客户端预览，返回预览 `id`、差异、成员和独立条目。
 - `apply(id)`：确认预览；证据或审核已改变时拒绝应用。
 - `undo()`、`exclude(uuid)`、`restoreExcluded()`：操作审核关系与身份排除。个人隐藏和首选应由消费者另存。
-- `openReview({migration})`：打开独立管理入口。
+- `openReview()`：打开独立管理入口。
 - `registerPublications(id, records)` / `unregisterPublications(id)`：共享书目扩展。返回的注销函数只撤去本次注册，不会删除后来的同名替换。
-- 声明式书目使用 `flags.truesight.publications`。迁移期仍读取既有 `flags.slow-insert.publications`，同包的新声明优先；这是已发布书目数据的兼容，不要求启用 Slow Insert。所有提供方改用新字段后可移除旧字段支持。
+- 声明式书目使用 `flags.truesight.publications`。
 - `sourceEnvironment()`：当前来源解析上下文，供搜索展示等消费者使用。
 
 监听 `Hooks.on('truesightChanged', status => ...)` 重建派生结果。应用、撤销、身份排除、索引和来源更新触发通知。通知只带状态与修订，不广播成员 UUID、名称或来源。每次读取重新按权限检查并验证已应用快照，普通刷新不自动扩大已确认组。
@@ -61,3 +51,7 @@ const member = catalog.getMember('Compendium.package.pack.Item.id');
 `names.apiVersion` 为 1。名称层读取可见索引、独立名称证据和 `catalog` 的有效成员关系，按消费者自己的候选目录消歧。没有中文汉化包时不读取其资产，仍可使用索引中的原名和双语名；汉化包已启用但读取失败则报告失败，不发布不完整结果。
 
 CPR/GPS 适配监听目录变更重建计划；重建前先撤下旧派生结果。CPR 只撤回由本适配注册且尚未被其他代码改写的键；GPS 重建期间保留原生查找。基座不依赖或调用提供方的自动化入口。
+
+## v0.1.1
+
+「应用归组」移到成员列表上方；移除旧 Slow Insert 快照迁入及旧书目命名空间、旧 dnd5e 来源字段支持。现有 Truesight 审核和撤销状态保持原样。

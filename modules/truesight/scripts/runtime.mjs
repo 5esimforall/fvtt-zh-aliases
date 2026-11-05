@@ -1,6 +1,6 @@
 import {CatalogService} from './catalog/service.mjs';
 import {reviewSettingKey} from './catalog/state.mjs';
-import {GROUP_INDEX_FIELDS, GROUP_ACTOR_INDEX_FIELDS} from './catalog/identity.mjs';
+import {GROUP_INDEX_FIELDS} from './catalog/identity.mjs';
 
 export const MODULE_ID = 'truesight';
 export const CHANGED = 'truesightChanged';
@@ -29,7 +29,7 @@ export function createRuntime({game, hooks, config, quickInsert = () => globalTh
   let indexing = false, failure = null, timer;
   const subscriptions = [];
   game.settings.register(MODULE_ID, key, {scope: 'client', config: false, type: Object, default: null});
-  for (const [type, fields] of [['Item', ITEM_FIELDS], ['Actor', ['system.source', ...GROUP_ACTOR_INDEX_FIELDS]]]) {
+  for (const [type, fields] of [['Item', ITEM_FIELDS], ['Actor', ['system.source']]]) {
     for (const field of fields) if (!config[type].compendiumIndexFields.includes(field)) config[type].compendiumIndexFields.push(field);
   }
   const service = new CatalogService({
@@ -48,12 +48,7 @@ export function createRuntime({game, hooks, config, quickInsert = () => globalTh
       externalPublications: {titles: parser()?.SOURCE_JSON_TO_FULL, abbreviations: parser()?.SOURCE_JSON_TO_ABV, dates: parser()?.SOURCE_JSON_TO_DATE}}),
     load: () => game.settings.get(MODULE_ID, key),
     save: state => game.settings.set(MODULE_ID, key, state),
-    notify: status => hooks.callAll(CHANGED, status),
-    legacy: () => {
-      const oldKey = `slow-insert.groupingState-${encodeURIComponent(game.world?.id ?? 'unknown')}`;
-      const raw = game.settings.storage?.get('client')?.getItem(oldKey);
-      return raw ? JSON.parse(raw) : null;
-    }
+    notify: status => hooks.callAll(CHANGED, status)
   });
   service.registerPublications = (id, records) => {
     if (typeof id !== 'string' || !id.trim() || !Array.isArray(records)) throw new TypeError('Expected a publication provider id and records');

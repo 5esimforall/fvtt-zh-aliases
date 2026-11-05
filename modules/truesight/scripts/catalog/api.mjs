@@ -13,7 +13,6 @@ export const catalog = Object.freeze({
   read: uuids => current().read(uuids),
   getMember: uuid => current().getMember(uuid),
   preview: options => current().preview(options),
-  previewMigration: () => current().previewMigration(),
   apply: id => current().apply(id),
   undo: () => current().undo(),
   exclude: uuid => current().exclude(uuid),

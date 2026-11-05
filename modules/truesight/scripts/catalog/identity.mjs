@@ -2,7 +2,6 @@ import { identifySource, prepareSourceEnvironment } from "./source-resolution.mj
 
 // Metadata only: never load documents, descriptions, activities or effects.
 export const GROUP_INDEX_FIELDS = Object.freeze(["originalName", "flags.babele.originalName", "flags.chris-premades.info.identifier", "flags.gambits-premades.gpsUuid"]);
-export const GROUP_ACTOR_INDEX_FIELDS = Object.freeze(["system.details.source"]);
 export const GROUP_RULE_VERSION = 1;
 const text = value => typeof value === "string" ? value.trim() : "";
 const normalName = value => text(value).normalize("NFKC").toLowerCase().replace(/[\s()（）]/g, "");
@@ -10,6 +9,7 @@ const english = value => /^[A-Za-z][A-Za-z0-9\s'’:,()&.!+/-]*$/.test(text(valu
 const nameKey = value => text(value).normalize("NFKC").toLowerCase().replace(/’/g,"'").replace(/\s+/g," ");
 const slug = value => nameKey(value).replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
 const identifier = value => /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(text(value)) && !["none","unknown","undefined","null","spell","item"].includes(value) ? value : null;
+// Current Quick Insert compendium results omit the document type segment.
 export function canonicalUuid(item) {
   const uuid = text(typeof item === "string" ? item : item?.uuid);
   const type = typeof item === "string" ? "Item" : item?.documentType;
@@ -30,7 +30,7 @@ export function isSrdSource(item, environment={}) {
   const pack=environment.packs?.get(packId);
   const pkg=pack?.metadata?.packageType==="system"?environment.system:environment.modules?.get(pack?.metadata?.packageName);
   const books=Object.keys(pkg?.flags?.dnd5e?.sourceBooks??{});
-  const source=item.system?.source ?? item.system?.details?.source;
+  const source=item.system?.source;
   return [source,source?.book,source?.custom,pack?.metadata?.flags?.dnd5e?.sourceBook,
     books.length===1?books[0]:null,pack?.title,pack?.metadata?.label,item.packageName]
     .some(value=>/\bsrd(?:\b|\d)|\bsystem reference document\b/i.test(text(value)));
