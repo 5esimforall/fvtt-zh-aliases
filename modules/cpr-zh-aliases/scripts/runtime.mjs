@@ -49,7 +49,7 @@ export function macroNames(row, cpr) {
   return [...new Set(lists.map(list => list?.[info.identifier]?.name).filter(name => typeof name === 'string'))];
 }
 
-export async function activate({core, cpr, renamedItems, packs, loadCorpus, ...corpusOptions}) {
+export async function activate({core, cpr, renamedItems, packs, loadCorpus, isCurrent = () => true, onRegister = () => {}, ...corpusOptions}) {
   const provider = 'cpr';
   if (core?.apiVersion !== 1) return {provider, status: 'unsupported-core'};
   if (!renamedItems || ![null, Object.prototype].includes(Object.getPrototypeOf(renamedItems)) ||
@@ -69,18 +69,42 @@ export async function activate({core, cpr, renamedItems, packs, loadCorpus, ...c
     try {
       groups = core.itemGroups(corpus.indexes, corpus.catalogFor, corpus.localItems, row => macroNames(row, cpr));
     } catch (error) {
-      return {provider, ...core.sourceError(error, 'slow-insert')};
+      return {provider, ...core.sourceError(error, 'truesight')};
     }
     // CPR's single exact-key table requires agreement across types and editions.
     const {aliases, report} = core.planAliases({pairs, lookupNames: names, existingAliases: renamedItems, groups});
+    if (!isCurrent()) return {provider, status: 'superseded'};
     let registered = 0;
     for (const [displayName, lookupName] of aliases) {
       if (displayName in renamedItems) continue;
       renamedItems[displayName] = lookupName;
+      onRegister(displayName, lookupName);
       registered++;
     }
-    return {...report, provider, registered, grouping: 'slow-insert'};
+    return {...report, provider, registered, grouping: 'truesight'};
   } catch (error) {
     return {provider, ...core.sourceError(error)};
   }
+}
+
+/** Retract only entries installed by this adapter. A late asynchronous build
+ * cannot publish names based on a superseded review. */
+export function createController(options) {
+  const owned = new Map();
+  let generation = 0;
+  const api = {report: {provider: 'cpr', status: 'loading'}};
+  const clear = () => {
+    for (const [key, value] of owned) if (options.renamedItems?.[key] === value) delete options.renamedItems[key];
+    owned.clear();
+  };
+  api.refresh = async () => {
+    const current = ++generation;
+    clear(); api.report = {provider: 'cpr', status: 'loading'};
+    const report = await activate({...options, isCurrent: () => current === generation,
+      onRegister: (key, value) => owned.set(key, value)});
+    if (current === generation) api.report = report;
+    return api.report;
+  };
+  api.stop = () => { generation++; clear(); api.report = {provider: 'cpr', status: 'stopped'}; };
+  return api;
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {core} from '../modules/zh-aliases-core/scripts/api.mjs';
-import {readNamePairs} from '../modules/zh-aliases-core/scripts/translations.mjs';
+import {core} from '../modules/truesight/scripts/names/api.mjs';
+import {readNamePairs} from '../modules/truesight/scripts/names/translations.mjs';
 
 const pair = (englishName, rules, type = 'feat') => ({translatedName: '同名', englishName,
   source: `${type}:${rules}#${englishName}`, type, rules});
@@ -50,17 +50,11 @@ test('translation rows keep known type and edition from IDs or Babele original n
   assert.deepEqual(pairs.map(p => [p.englishName, p.type, p.rules]), [['Old Feature', 'feat', '2014'], ['New Feature', 'feat', '2024']]);
 });
 
-test('core init publishes a pure API without requiring either automation provider', async t => {
-  const callbacks = new Map(), module = {};
-  for (const [key, value] of Object.entries({Hooks: {once: (event, cb) => callbacks.set(event, cb)},
-    game: {modules: new Map([['zh-aliases-core', module]])}})) {
-    const before = Object.getOwnPropertyDescriptor(globalThis, key);
-    Object.defineProperty(globalThis, key, {value, configurable: true});
-    t.after(() => before ? Object.defineProperty(globalThis, key, before) : delete globalThis[key]);
-  }
-  await import('../modules/zh-aliases-core/scripts/main.mjs');
-  callbacks.get('init')();
-  assert.equal(module.api, core);
-  assert.equal(module.api.apiVersion, 1);
-  assert.ok(Object.isFrozen(module.api));
+test('public API exposes separate catalog, names and source namespaces without automation dependencies', async () => {
+  const {api} = await import('../modules/truesight/api-v1.mjs');
+  assert.equal(api.names, core);
+  assert.equal(api.apiVersion, 1);
+  assert.equal(api.catalog.apiVersion, 1);
+  assert.ok(Object.isFrozen(api));
+  assert.ok(Object.isFrozen(core));
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {applyPlan} from './helpers/apply-plan.mjs';
-import {itemGroups} from '../modules/zh-aliases-core/scripts/groups.mjs';
+import {itemGroups} from '../modules/truesight/scripts/names/groups.mjs';
 
 const native = new Set(['Blade Ward', 'Shield', 'Misty Step']);
 const member = (displayName, source = displayName, more) => ({displayName, source, ...more});

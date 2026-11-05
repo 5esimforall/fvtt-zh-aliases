@@ -46,6 +46,9 @@ export function readNamePairs(packId, titles, index, knownNames) {
 }
 
 export function collectNamePairs(packs, titleIndex, knownNames, extraPackIds = []) {
+  // Missing optional translator is distinct from a failed/incomplete dictionary.
+  // Independent indexed originals and bilingual names remain usable.
+  if (titleIndex === null) return [];
   // The base sources supply the same reference corpus even without optional
   // compendiums installed. Additional sources must be visible Item packs.
   const sources = new Set([...BASE_ITEM_PACKS, ...extraPackIds]);

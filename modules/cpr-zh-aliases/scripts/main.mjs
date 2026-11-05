@@ -1,15 +1,18 @@
-import {activate} from './runtime.mjs';
+import {createController} from './runtime.mjs';
 
 const id = 'cpr-zh-aliases';
-const api = {report: {provider: 'cpr', status: 'waiting-for-cpr'}};
-Hooks.once('init', () => { game.modules.get(id).api = api; });
+Hooks.once('init', () => { game.modules.get(id).api = {report: {provider: 'cpr', status: 'waiting-for-cpr'}}; });
 Hooks.once('cprReady', async () => {
-  api.report = {provider: 'cpr', status: 'loading'};
-  const core = game.modules.get('zh-aliases-core')?.active ? game.modules.get('zh-aliases-core').api : null;
-  api.report = await activate({core, cpr: globalThis.chrisPremades,
+  const foundation = game.modules.get('truesight');
+  const core = foundation?.active && foundation.api?.apiVersion === 1 ? foundation.api.names : null;
+  const api = createController({core, cpr: globalThis.chrisPremades,
     renamedItems: CONFIG.chrisPremades?.renamedItems, packs: game.packs,
     loadCorpus: options => core.loadCorpus(options)});
-  const {status, registered, clusterErrors} = api.report;
-  if (status === 'ready') console.info(id, {status, registered});
-  else console.warn(id, {status, registered, clusterErrors: clusterErrors?.length}, api.report);
+  game.modules.get(id).api = api;
+  const refresh = api.refresh, stop = api.stop;
+  const hooks = Hooks;
+  const hook = hooks.on('truesightChanged', () => { if (game.modules.get(id)?.active) void refresh(); });
+  api.stop = () => { hooks.off('truesightChanged', hook); stop(); };
+  await refresh();
+  if (api.report.status !== 'ready') console.warn(id, api.report);
 });

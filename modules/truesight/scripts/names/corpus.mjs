@@ -10,7 +10,7 @@ export async function readCorpus({packs, loadTitleIndex, loadGrouping, localItem
   try {
     catalogFor = await loadGrouping();
   } catch (cause) {
-    throw Object.assign(new Error('Grouping unavailable', {cause}), {source: 'slow-insert'});
+    throw Object.assign(new Error('Grouping unavailable', {cause}), {source: 'truesight'});
   }
   const indexes = new Map();
   const visible = [...packs.entries()].filter(([, pack]) => pack.visible && pack.documentName === 'Item');
@@ -44,6 +44,7 @@ function* visibleLocalItems(game) {
 export function loadCorpus({fields = []} = {}) {
   return readCorpus({packs: game.packs, loadGrouping, fields, localItems: visibleLocalItems(game),
     loadTitleIndex: async () => {
+      if (!game.modules.get(TRANSLATION_MODULE)?.active) return null;
       const path = 'modules/' + TRANSLATION_MODULE + '/translation/cn/titles.json';
       const response = await fetch(foundry.utils.getRoute(path));
       if (!response.ok) throw Object.assign(new Error('HTTP ' + response.status), {source: TRANSLATION_MODULE});

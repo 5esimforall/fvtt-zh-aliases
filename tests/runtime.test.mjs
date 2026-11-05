@@ -1,9 +1,10 @@
-import {core} from '../modules/zh-aliases-core/scripts/api.mjs';
+import {connectCatalog} from '../modules/truesight/scripts/catalog/api.mjs';
+import {core} from '../modules/truesight/scripts/names/api.mjs';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activate } from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
-import { BASE_ITEM_PACKS } from '../modules/zh-aliases-core/scripts/translations.mjs';
+import { BASE_ITEM_PACKS } from '../modules/truesight/scripts/names/translations.mjs';
 
 function client() {
   const calls = [], table = {}, docs = [
@@ -91,14 +92,13 @@ test('additional visible Item sources can reveal conflicts; Actor, hidden pack a
 
 test('Foundry entry point waits for cprReady on a non-GM client and uses the configured route', async t => {
   const env = client(), events = new Map(), self = {};
+  connectCatalog({whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
   const deps = {
-    Hooks: {once: (event, callback) => events.set(event, callback)},
-    game: {user: {isGM: false}, modules: new Map([['zh-aliases-core', {active:true,api:core}], ['cpr-zh-aliases', self], ['slow-insert', {active:true, version:'9.0.0'}]]), packs: env.packs},
+    Hooks: {once: (event, callback) => events.set(event, callback), on: (event, cb) => events.set(event, cb), off: event => events.delete(event)},
+    game: {user: {isGM: false}, modules: new Map([['truesight', {active:true,api:{apiVersion:1,names:core}}], ['cpr-zh-aliases', self], ['dnd-simplified-chinese-babele-patch', {active:true}]]), packs: env.packs},
     chrisPremades: env.cpr, CONFIG: {chrisPremades: {renamedItems: env.renamedItems}},
     location: {href:'http://localhost/table/game'},
-    foundry: {utils: {getRoute: path => path === 'modules/slow-insert/scripts/grouping.mjs'
-      ? 'data:text/javascript,export function buildGroupingCatalog(){return {entries:new Map()}}'
-      : '/table/' + path}},
+    foundry: {utils: {getRoute: path => '/table/' + path}},
     fetch: async path => {
       assert.equal(path, '/table/modules/dnd-simplified-chinese-babele-patch/translation/cn/titles.json');
       return {ok: true, json: env.loadTitleIndex};
@@ -122,7 +122,7 @@ test('a conflicting CPR flag on a non-CPR member blocks all its siblings without
     {_id:'b',name:'另一个译名',type:'spell',flags:{'chris-premades':{info:{identifier:'cunningAction',rules:'modern'}}}}];
   env.packs.set('extra.spells',{visible:true,documentName:'Item',getIndex:async()=>rows});
   const report = await activate({...env,loadGrouping:()=>items=>new Map(items.map(i=>[i.uuid,{key:'fixture-group'}]))});
-  assert.equal(report.grouping,'slow-insert');
+  assert.equal(report.grouping,'truesight');
   assert.equal(report.status,'cluster-conflict');
   assert.deepEqual(report.clusterErrors[0].candidates.map(c=>c.englishName),['Cunning Action','Misty Step']);
   assert.equal(env.renamedItems['另一个译名'],undefined);
@@ -130,30 +130,32 @@ test('a conflicting CPR flag on a non-CPR member blocks all its siblings without
   assert.equal(env.renamedItems['灵巧动作'],'Cunning Action');
 });
 
-test('Slow Insert is required without a version constraint', async () => {
-  const manifest = JSON.parse(await readFile(new URL('../modules/zh-aliases-core/module.json', import.meta.url)));
-  assert.deepEqual(manifest.relationships.requires.filter(r => r.id === 'slow-insert'),
-    [{id:'slow-insert', type:'module'}]);
+test('missing or incompatible catalog never masquerades as an empty grouping result', async () => {
+  const {loadGrouping} = await import('../modules/truesight/scripts/names/groups.mjs');
+  const env = client();
+  connectCatalog(null);
+  let r = await activate({...env,loadGrouping});
+  assert.equal(r.status,'source-error'); assert.equal(r.source,'truesight');
+  connectCatalog({whenReady:async()=>{},read:()=>({apiVersion:99,status:'ready',entries:new Map()})});
+  r = await activate({...env,loadGrouping});
+  assert.equal(r.status,'source-error'); assert.equal(r.source,'truesight');
+  assert.deepEqual(env.renamedItems,{});
 });
 
-test('missing, inactive or incompatible Slow Insert never falls back to individual aliases', async t => {
-  const modules = new Map();
-  const {loadGrouping} = await import('../modules/zh-aliases-core/scripts/groups.mjs');
-  for (const [key,value] of Object.entries({game:{modules}, location:{href:'http://localhost/game'},
-    foundry:{utils:{getRoute:()=>'data:text/javascript,export const unrelated = true'}}})) {
-    const before = Object.getOwnPropertyDescriptor(globalThis,key);
-    Object.defineProperty(globalThis,key,{value,configurable:true});
-    t.after(()=>before ? Object.defineProperty(globalThis,key,before) : delete globalThis[key]);
-  }
-  const env = client();
-  for (const active of [undefined, false, true]) {
-    if (active !== undefined) modules.set('slow-insert',{active});
-    const r = await activate({...env,loadGrouping});
-    assert.equal(r.status,'source-error'); assert.equal(r.source,'slow-insert');
-    assert.match(r.detail, active ? /buildGroupingCatalog/ : /not active/);
-  }
-  assert.deepEqual(env.calls, []);
-  const r = await activate({...env,loadGrouping:()=>()=>undefined});
-  assert.equal(r.status,'source-error'); assert.equal(r.source,'slow-insert');
-  assert.deepEqual(env.renamedItems,{});
+test('CPR refresh withdraws only owned aliases and rejects late asynchronous publication', async () => {
+  const {createController} = await import('../modules/cpr-zh-aliases/scripts/runtime.mjs');
+  const env = client(); env.renamedItems.existing = 'Existing';
+  const api = createController(env); await api.refresh();
+  assert.equal(env.renamedItems.迷踪步,'Misty Step');
+  env.renamedItems.灵巧动作='External replacement';
+  api.stop();
+  assert.equal(env.renamedItems.迷踪步,undefined);
+  assert.equal(env.renamedItems.灵巧动作,'External replacement');
+  assert.equal(env.renamedItems.existing,'Existing');
+  let release;
+  const slow = createController({...client(), loadTitleIndex:()=>new Promise(resolve=>{release=resolve;})});
+  const pending = slow.refresh();
+  while(!release) await new Promise(resolve=>setTimeout(resolve,0));
+  slow.stop(); release(await env.loadTitleIndex());
+  await pending; assert.equal(slow.report.status,'stopped');
 });

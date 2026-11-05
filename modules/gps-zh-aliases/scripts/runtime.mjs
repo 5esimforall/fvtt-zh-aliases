@@ -14,7 +14,7 @@ export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
     api.report.status = 'unsupported-gps-entry';
     return api;
   }
-  let state, stop, pending, generation = 0;
+  let state, stop, generation = 0;
   function plan(mode, scope) {
     const key = JSON.stringify([mode, scope.rules, scope.type]);
     if (!state.plans.has(key)) {
@@ -37,22 +37,21 @@ export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
     return plan(mode, scope).aliases.get(item.name) ?? null;
   }
   api.refresh = () => {
-    if (pending) return pending;
     const current = ++generation;
     state = null;
     api.report = {provider: 'gps', status: 'loading'};
-    pending = (async () => {
+    return (async () => {
       try {
         const corpus = await loadCorpus();
         let groups;
         try {
           groups = core.itemGroups(corpus.indexes, corpus.catalogFor, corpus.localItems);
         } catch (error) {
-          throw Object.assign(new Error('Grouping unavailable', {cause: error}), {source: 'slow-insert'});
+          throw Object.assign(new Error('Grouping unavailable', {cause: error}), {source: 'truesight'});
         }
         if (current !== generation) return api.report;
         state = {corpus, groups, plans: new Map()};
-        api.report = {provider: 'gps', status: 'ready', grouping: 'slow-insert', scopes: []};
+        api.report = {provider: 'gps', status: 'ready', grouping: 'truesight', scopes: []};
         // Validate every dictionary before enabling any fallback. Plans remain
         // scoped; the two editions never share a global display-name map.
         const mode = utils.genericUtils.getCPRSetting('gambitPremades');
@@ -72,8 +71,7 @@ export async function activate({core, cpr, loadCorpus, isActive = () => true}) {
         }
       }
       return api.report;
-    })().finally(() => { pending = null; });
-    return pending;
+    })();
   };
   api.stop = () => {
     generation++;

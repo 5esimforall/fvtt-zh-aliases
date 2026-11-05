@@ -7,13 +7,13 @@ import {join, resolve, relative} from 'node:path';
 import {readModules, files, root} from '../tools/workspace.mjs';
 import {packageModules} from '../tools/package.mjs';
 
-test('three installable modules have a provider-independent core and independent adapter dependencies', async () => {
+test('three installable modules have an optional-translation provider-independent foundation and independent adapter dependencies', async () => {
   const modules = await readModules();
-  assert.deepEqual(modules.map(m => m.manifest.id), ['cpr-zh-aliases', 'gps-zh-aliases', 'zh-aliases-core']);
+  assert.deepEqual(modules.map(m => m.manifest.id), ['cpr-zh-aliases', 'gps-zh-aliases', 'truesight']);
   const dependencies = Object.fromEntries(modules.map(({manifest: m}) => [m.id, m.relationships.requires.map(r => r.id)]));
-  assert.deepEqual(dependencies['zh-aliases-core'], ['slow-insert', 'dnd-simplified-chinese-babele-patch']);
-  assert.deepEqual(dependencies['cpr-zh-aliases'], ['zh-aliases-core', 'chris-premades']);
-  assert.deepEqual(dependencies['gps-zh-aliases'], ['zh-aliases-core', 'chris-premades', 'gambits-premades']);
+  assert.deepEqual(dependencies['truesight'], ['quick-insert']);
+  assert.deepEqual(dependencies['cpr-zh-aliases'], ['truesight', 'chris-premades']);
+  assert.deepEqual(dependencies['gps-zh-aliases'], ['truesight', 'chris-premades', 'gambits-premades']);
   for (const {directory, manifest} of modules) {
     for await (const path of files(directory)) {
       if (!path.endsWith('.mjs')) continue;
@@ -24,7 +24,7 @@ test('three installable modules have a provider-independent core and independent
         assert.ok(!relative(directory, target).startsWith('..'), 'Cross-plugin source import: ' + path);
         await readFile(target);
       }
-      if (manifest.id === 'zh-aliases-core') assert.doesNotMatch(content, /chris-premades|gambits-premades|renamedItems|cprNames/);
+      if (manifest.id === 'truesight' && path.includes('/names/')) assert.doesNotMatch(content, /chris-premades|gambits-premades|renamedItems|cprNames/);
     }
   }
   assert.equal(JSON.parse(await readFile(join(root, 'package.json'))).name, 'fvtt-zh-aliases');

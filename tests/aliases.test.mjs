@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readNamePairs } from '../modules/zh-aliases-core/scripts/translations.mjs';
+import { readNamePairs } from '../modules/truesight/scripts/names/translations.mjs';
 import { applyPlan } from './helpers/apply-plan.mjs';
 
 const misty = 'Misty Step', zh = '迷踪步';

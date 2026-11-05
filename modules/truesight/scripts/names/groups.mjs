@@ -1,16 +1,13 @@
-// Adapt Foundry index rows to the audited Item catalog used by Slow Insert.
-// Do not import its panel, user pins, edition filters or preferred member.
+import {catalog} from '../catalog/api.mjs';
+
+// Membership is owned by Truesight; consumers never supply an applied snapshot.
 export async function loadGrouping() {
-  if (!game.modules.get('slow-insert')?.active) throw new Error('Slow Insert is not active');
-  const path = foundry.utils.getRoute('modules/slow-insert/scripts/grouping.mjs');
-  const {buildGroupingCatalog} = await import(new URL(path, location.href).href);
-  if (typeof buildGroupingCatalog !== 'function') throw new Error('Slow Insert does not export buildGroupingCatalog');
-  return items => buildGroupingCatalog(items.map(item => ({item})), {
-    packs: game.packs, modules: game.modules, system: game.system, world: game.world,
-    sourceBooks: CONFIG.DND5E?.sourceBooks, localize: key => game.i18n.localize(key),
-    externalPublications: {titles: globalThis.Parser?.SOURCE_JSON_TO_FULL,
-      abbreviations: globalThis.Parser?.SOURCE_JSON_TO_ABV, dates: globalThis.Parser?.SOURCE_JSON_TO_DATE}
-  }).entries;
+  await catalog.whenReady();
+  return items => {
+    const result = catalog.read(items.map(item => item.uuid));
+    if (result.apiVersion !== 1 || !['ready', 'unreviewed'].includes(result.status)) throw new Error('Incompatible or unavailable Truesight catalog');
+    return result.entries;
+  };
 }
 
 export const GROUP_FIELDS = ['system.identifier', 'system.source', 'system.school', 'system.level', '_stats.modifiedTime'];
@@ -30,7 +27,7 @@ export function itemGroups(indexes, catalogFor, localItems = [], extraEvidence =
     }
   }
   const catalog = catalogFor(items), groups = new Map();
-  if (!(catalog instanceof Map)) throw new TypeError('Expected Slow Insert catalog entries');
+  if (!(catalog instanceof Map)) throw new TypeError('Expected Truesight catalog entries');
   function add(key, member) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(member);
@@ -38,7 +35,7 @@ export function itemGroups(indexes, catalogFor, localItems = [], extraEvidence =
   for (const item of items) {
     const entry = catalog.get(item.uuid);
     if (!entry || !(entry.key === null || typeof entry.key === 'string')) {
-      throw new Error('Invalid Slow Insert catalog entry: ' + item.uuid);
+      throw new Error('Invalid Truesight catalog entry: ' + item.uuid);
     }
     const key = entry.key;
     if (key || /\p{Script=Han}/u.test(item.name)) {

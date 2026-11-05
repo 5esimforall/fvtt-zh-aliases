@@ -1,6 +1,6 @@
 // Test-only publisher: core planning must never write the caller's table.
 import assert from 'node:assert/strict';
-import {planAliases} from '../../modules/zh-aliases-core/scripts/resolver.mjs';
+import {planAliases} from '../../modules/truesight/scripts/names/resolver.mjs';
 export function applyPlan(pairs, lookupNames, table, groups) {
   const before = {...table};
   const {aliases, report} = planAliases({pairs, lookupNames, existingAliases: table, groups});

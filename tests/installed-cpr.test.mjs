@@ -1,4 +1,4 @@
-import {core} from '../modules/zh-aliases-core/scripts/api.mjs';
+import {core} from '../modules/truesight/scripts/names/api.mjs';
 // Opt-in replay against a trusted local CPR installation. Execute only the lookup
 // functions, with small in-memory packs. Never start Foundry or open a world DB.
 import test from 'node:test';
@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import vm from 'node:vm';
 import { activate } from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
-import { TRANSLATION_MODULE } from '../modules/zh-aliases-core/scripts/translations.mjs';
+import { TRANSLATION_MODULE } from '../modules/truesight/scripts/names/translations.mjs';
 
 const modules = process.env.CPR_MODULES_DIR;
 test('installed CPR resolves the real translation spellings to the English control document', {
@@ -72,43 +72,4 @@ test('installed CPR resolves the real translation spellings to the English contr
   assert.equal(await ctx.getCPRAutomation(spell('未知 Misty Step')), undefined);
   const alreadyIdentified = {...spell('灵巧动作'), flags: {'chris-premades': {info: {identifier: 'mistyStep'}}}};
   assert.equal((await ctx.getCPRAutomation(alreadyIdentified)).uuid, 'fixture.spells14.mistyStep');
-});
-
-test('installed Slow Insert validates the five Blade Ward members, separated by rules', {
-  skip: !process.env.SLOW_INSERT_MODULE_DIR && 'set SLOW_INSERT_MODULE_DIR to a trusted Slow Insert directory'
-}, async t => {
-  const dir = process.env.SLOW_INSERT_MODULE_DIR;
-  const {pathToFileURL} = await import('node:url');
-  const {GROUPING_REGISTRY} = await import(pathToFileURL(join(dir,'data/grouping-registry.mjs')));
-  const {itemGroups, loadGrouping} = await import('../modules/zh-aliases-core/scripts/groups.mjs');
-  const modules = new Map([['slow-insert',{active:true}]]), packs = new Map(), indexes = new Map();
-  for (const [uuid, record] of Object.entries(GROUPING_REGISTRY.members)) {
-    if (record.identifier !== 'blade-ward') continue;
-    const [,pkg,id,,_id] = uuid.split('.'), packId = pkg + '.' + id;
-    const index = new Map([[_id,{_id, type:'spell',name:record.names[0],_stats:{modifiedTime:record.modifiedTime},
-      system:{identifier:record.identifier,school:record.school,level:record.level,source:{rules:record.rules}}}]]);
-    modules.set(pkg, {version:record.packageVersion});
-    packs.set(packId,{index,metadata:{packageName:pkg,packageType:'module'}});
-    indexes.set(packId,index);
-  }
-  for (const [key,value] of Object.entries({
-    game:{modules,packs,system:{id:'dnd5e'},i18n:{localize:k=>k}},
-    foundry:{utils:{getRoute:p=>{assert.equal(p,'modules/slow-insert/scripts/grouping.mjs');return pathToFileURL(join(dir,'scripts/grouping.mjs')).href;}}},
-    location:{href:'http://localhost/game'},CONFIG:{DND5E:{}}
-  })) {
-    const before = Object.getOwnPropertyDescriptor(globalThis,key);
-    Object.defineProperty(globalThis,key,{value,configurable:true});
-    t.after(()=>before ? Object.defineProperty(globalThis,key,before) : delete globalThis[key]);
-  }
-  const catalog = await loadGrouping();
-  const groups = itemGroups(indexes,catalog,[]);
-  assert.equal(groups.get('spell:2014:blade-ward').length,2);
-  assert.equal(groups.get('spell:2024:blade-ward').length,3);
-  const {applyPlan} = await import('./helpers/apply-plan.mjs');
-  const table = {};
-  assert.equal(applyPlan([],new Set(['Blade Ward']),table,groups).status,'ready');
-  assert.equal(table['剑刃防护 blade ward'],'Blade Ward');
-  assert.equal(table.剑刃防护,'Blade Ward');
-  modules.get('dnd5e_classpack').version = 'unverified-version';
-  assert.equal(itemGroups(indexes,catalog,[]).get('spell:2014:blade-ward').length,1);
 });

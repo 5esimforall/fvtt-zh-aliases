@@ -1,7 +1,8 @@
+import {connectCatalog} from '../modules/truesight/scripts/catalog/api.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {core} from '../modules/zh-aliases-core/scripts/api.mjs';
-import {BASE_ITEM_PACKS} from '../modules/zh-aliases-core/scripts/translations.mjs';
+import {core} from '../modules/truesight/scripts/names/api.mjs';
+import {BASE_ITEM_PACKS} from '../modules/truesight/scripts/names/translations.mjs';
 import {activate} from '../modules/gps-zh-aliases/scripts/runtime.mjs';
 import {installLookupFallback} from '../modules/gps-zh-aliases/scripts/lookup.mjs';
 import {activate as activateCPR} from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
@@ -112,8 +113,8 @@ test('missing core, missing GPS entry, read-only namespace and missing grouping 
   const env = client();
   assert.equal((await activate({...env, core: null})).report.status, 'unsupported-core');
   assert.equal((await activate({...env, cpr: {}})).report.status, 'unsupported-gps-entry');
-  const bad = await activate({...env, loadCorpus: async () => {throw Object.assign(Error('missing'), {source: 'slow-insert'});}});
-  assert.equal(bad.report.source, 'slow-insert');
+  const bad = await activate({...env, loadCorpus: async () => {throw Object.assign(Error('missing'), {source: 'truesight'});}});
+  assert.equal(bad.report.source, 'truesight');
   assert.equal(env.compendiumUtils.getAllAutomations, env.native);
   Object.freeze(env.compendiumUtils);
   assert.equal((await activate(env)).report.status, 'unsupported-gps-entry');
@@ -189,15 +190,15 @@ test('stop during asynchronous loading cannot install a late wrapper', async () 
 
 test('GPS entry point starts on a non-GM client without the CPR alias adapter and respects Foundry routes', async t => {
   const env = client(), events = new Map(), self = {};
-  const modules = new Map([['zh-aliases-core', {active: true, api: core}], ['gps-zh-aliases', self],
-    ...['slow-insert', 'chris-premades', 'gambits-premades'].map(id => [id, {active: true}])]);
+  const modules = new Map([['truesight', {active: true, api: {apiVersion:1,names:core}}], ['gps-zh-aliases', self],
+    ...['chris-premades', 'gambits-premades'].map(id => [id, {active: true}])]);
   self.active = true;
-  const dependencies = {Hooks: {once: (event, cb) => events.set(event, cb)},
+  modules.set('dnd-simplified-chinese-babele-patch', {active:true});
+  connectCatalog({whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
+  const dependencies = {Hooks: {once: (event, cb) => events.set(event, cb), on: (event, cb) => events.set(event, cb), off: event => events.delete(event)},
     game: {modules, packs: env.packs, user: {isGM: false}, i18n: {localize: key => key}},
     CONFIG: {}, chrisPremades: env.cpr, location: {href: 'http://localhost/table/game'},
-    foundry: {utils: {getRoute: path => path === 'modules/slow-insert/scripts/grouping.mjs'
-      ? 'data:text/javascript,export function buildGroupingCatalog(rows){return {entries:new Map(rows.map(({item})=>[item.uuid,{key:null}]))}}'
-      : '/table/' + path}},
+    foundry: {utils: {getRoute: path => '/table/' + path}},
     fetch: async path => {
       assert.equal(path, '/table/modules/dnd-simplified-chinese-babele-patch/translation/cn/titles.json');
       return {ok: true, json: async () => env.titleIndex};
