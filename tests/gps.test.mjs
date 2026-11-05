@@ -37,7 +37,7 @@ function client() {
 }
 const feat = name => Object.freeze({name, type: 'feat'});
 
-test('reviewed feature identity shares English evidence with Chinese copies without changing GPS source or UUID', async t => {
+for (const reviewMode of ['automatic', 'name-decision']) test(`${reviewMode} feature review shares English evidence without changing GPS source or UUID`, async t => {
   const env = client();
   env.titleIndex['dnd5e.classfeatures'].titles = {};
   const native = [];
@@ -45,7 +45,7 @@ test('reviewed feature identity shares English evidence with Chinese copies with
     const system = {identifier: 'indomitable', source: {rules}, type: {value: 'class'},
       requirements: 'Fighter', prerequisites: {level: 9}};
     env.docs[i].system = structuredClone(system);
-    native.push({_id: 'native' + rules, name: '不屈', type: 'feat', system},
+    native.push({_id: 'native' + rules, name: '不屈', type: 'feat', system: {...system, prerequisites: {level: reviewMode==='name-decision'?13:9}}},
       {_id: 'bilingual' + rules, name: '不屈 Indomitable', type: 'feat', system: structuredClone(system)},
       {_id: 'fighter' + rules, name: 'Fighter', type: 'class', system: {identifier: 'fighter', source: {rules}}});
   }
@@ -65,6 +65,13 @@ test('reviewed feature identity shares English evidence with Chinese copies with
   assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('不屈')), []);
   before.stop();
   await catalog.apply(catalog.preview().id);
+  if(reviewMode==='name-decision')for(const rules of ['2014','2024']) {
+    const left=`Compendium.fixture.features.Item.native${rules}`,right=`Compendium.fixture.features.Item.bilingual${rules}`;
+    const preview=catalog.previewNameDecision({left,right,kind:'same',reason:'Compared the rule text; prerequisite level differs between implementations'});
+    assert.equal(catalog.getMember(left).key,null,'a name-review preview does not publish membership');
+    await catalog.apply(preview.id);
+    assert.equal(catalog.getMember(left).key,catalog.getMember(right).key);
+  }
   assert.equal(catalog.read().groups.size, 2);
   for (const doc of env.docs) assert.equal(catalog.getMember(doc.uuid).status, 'member');
   const api = await activate(env);
