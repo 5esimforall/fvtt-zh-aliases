@@ -1,25 +1,26 @@
 # 中文自动化名称适配
 
-角色卡可以保留「迷踪步」「不屈」，也可以写完整双语名。这个工作区提供两个适配插件，依赖同级 [Truesight 项目](../truesight/README.md) 的共享条目聚类／名称解析基座，让 CPR Medkit 按有证据的英文名查找 CPR、GPS 自动化；物品显示名保持原样，是否应用候选仍由使用者决定。
+角色卡可以保留「迷踪步」「不屈」，也可以写完整双语名。这个工作区提供三个适配插件，依赖同级 [Truesight 项目](../truesight/README.md) 的共享条目聚类／名称解析基座，让 CPR Medkit 按有证据的英文名查找 CPR、GPS、MISC 自动化；物品显示名保持原样，是否应用候选仍由使用者决定。
 
-## 两个适配插件与共享依赖
+## 三个适配插件与共享依赖
 
 | 插件目录 / Foundry ID | 职责 | 必需依赖 |
 | --- | --- | --- |
 | `../truesight/module` / `truesight` | 聚类条目、解析来源、保存审核关系、整理名称证据与消歧 | Quick Insert |
 | `modules/cpr-zh-aliases` / `cpr-zh-aliases` | 注册 CPR 自有自动化的名称映射 | 基座、CPR |
 | `modules/gps-zh-aliases` / `gps-zh-aliases` | 补充 CPR Medkit 中的 GPS 中文名查找 | 基座、CPR、Gambit’s Premades |
+| `modules/misc-zh-aliases` / `misc-zh-aliases` | 补充 CPR Medkit 中的 MISC 中文名查找 | 基座、CPR、Midi Item Showcase Community |
 
-两个适配插件互不依赖。GPS 适配仍依赖 CPR，因为当前接入点是 CPR Medkit；它不提供脱离 Medkit 的 GPS 宏执行兼容。基座不依赖 Slow Insert、中文汉化包、CPR 或 GPS，也不单独写入任何提供方的名称表。
+三个适配插件互不依赖。GPS 与 MISC 适配仍依赖 CPR，因为当前接入点是 CPR Medkit；它们不提供脱离 Medkit 的宏执行兼容。基座不依赖 Slow Insert、中文汉化包或自动化提供方，也不单独写入任何提供方的名称表。
 
-目标环境为 Foundry V13、dnd5e。本机源码回放核对的 CPR 为 1.5.49，GPS 为 2.1.44，简体中文 Babele 汉化包（`dnd-simplified-chinese-babele-patch`）为 1.0.202。Slow Insert 0.6.9 与两个适配共同消费 Truesight API v1。插件读取汉化包的标题索引，发行包不复制第三方译表。
+目标环境为 Foundry V13、dnd5e。本机源码回放核对的 CPR 为 1.5.49，GPS 为 2.1.44，MISC 为 1.6.14，简体中文 Babele 汉化包（`dnd-simplified-chinese-babele-patch`）为 1.0.202。Slow Insert 0.6.9 与三个适配共同消费 Truesight API v1。插件读取汉化包的标题索引，发行包不复制第三方译表。
 
 ## 安装与使用
 
-1. 在本项目运行 `npm run package`，取得两个适配插件 ZIP；在同级 `truesight` 项目运行 `npm run package`，取得基座 ZIP。也可以复制各项目的可安装模块源码目录，并按模块 ID 命名安装目录。
-2. 将 `truesight` 和所需适配插件的文件夹放入 Foundry 用户数据的 `Data/modules/`。每个目录中的 `module.json` 必须直接位于该目录内。若只用 GPS 名称支持，无需安装 CPR 中文别名适配插件。
+1. 在本项目运行 `npm run package`，取得三个适配插件 ZIP；在同级 `truesight` 项目运行 `npm run package`，取得基座 ZIP。也可以复制各项目的可安装模块源码目录，并按模块 ID 命名安装目录。
+2. 将 `truesight` 和所需适配插件的文件夹放入 Foundry 用户数据的 `Data/modules/`。每个目录中的 `module.json` 必须直接位于该目录内。若只用 GPS 或 MISC 名称支持，无需安装 CPR 中文别名适配插件。
 3. 重启 Foundry 服务发现新模块，在世界中启用基座、所需适配插件及表中依赖，重新载入客户端。GM 与玩家不必各自运行宏。
-4. 打开物品的 CPR Medkit。CPR 可用 `Misty Step` 对照「迷踪步」及双语名；GPS 可用 `Indomitable` 对照「不屈」及双语名。保持物品类型和规则代际相同，并在 CPR 的自动化来源配置中启用 GPS。
+4. 打开物品的 CPR Medkit。CPR 可用 `Misty Step` 对照「迷踪步」及双语名；GPS 可用 `Indomitable` 对照「不屈」及双语名。MISC 可用 `Deflect Missiles` 对照「拨挡飞弹」和「拨挡飞弹 Deflect Missiles」。保持物品类型和规则代际相同，并在 CPR 的自动化来源配置中启用对应来源。
 
 首次使用、存储范围和完整 API 见 [Truesight 使用说明](../truesight/module/README.md)。打包不会安装或启用插件。
 
@@ -30,9 +31,11 @@
 1. **收集证据。** 每个适配插件请求基座读取可见 Item 合集索引、可见世界物品、有观察权限的世界角色物品及汉化标题索引。Babele ID 键通过当前索引还原原名。记录已知类型和规则代际，缺失的上下文保留为未限定证据。
 2. **使用审核分组。** 名称层消费同一基座内聚类层的已审核成员关系，不反向参与聚类，也不按相似名称创建新组。未入组或审核失效的条目、世界物品按单条处理。接口不可用时停止该次构建，不降级为无审核模式。
 3. **对各提供方独立判断。** 双语显示名只提取完整英文一侧，不从长短语截取法术名。未命中的弱推测不参与冲突判断，也不能单独产生别名；完整显示名的译表记录、原名及同组已确认的证据仍保留。只归一匹配时的大小写、空格和括号，不改写显示名。
-4. **由适配层接入。** CPR 使用自己的全局名称表，因此同一显示名跨类型、跨规则代际也必须相容，且已有映射不覆盖。GPS 分类型和规则代际解析，先保留原查找；只有原结果没有 GPS 候选时，才以只读英文名视图重试原生查找，并只补回 GPS 来源的结果。重试产生的其他提供方结果不会替换原结果。
+4. **由适配层接入。** CPR 使用自己的全局名称表，因此同一显示名跨类型、跨规则代际也必须相容，且已有映射不覆盖。GPS 与 MISC 各自分类型和规则代际解析，先保留原查找；只有原结果没有该来源候选时，才以只读英文名视图重试原生查找，并只补回该来源的结果。重试产生的其他提供方结果不会替换原结果。
 
 GPS 目录按 CPR 的 GPS 集成模式纳入常规、自制或第三方合集，未读取隐藏合集。适配插件不修改 GPS 内部目录；候选 UUID、版本、来源优先级及原生目录是否就绪仍由 CPR 决定。NPC 专属特性的怪物身份匹配不在 GPS 别名支持范围内，NPC 法术仍按普通法术路径处理。
+
+MISC 目录按 CPR 的 `miscPremades` 模式选择：1 为常规，2 加入自制，3 加入 Unearthed Arcana，4 包含两者。适配排除隐藏合集及标记为 factory 的条目；自制内容限于上游使用的 Items 文件夹，UA 法术限于 Spells 文件夹。候选仍由 CPR 原生查找最终确认，不修改上游目录。CPR 1.5.49 的 UA 职业特性分支将 UUID 写入类型，无法按特性类型命中；适配保持这一原有结果，不修补上游行为。MISC 同样不处理 NPC 专属特性的怪物身份匹配。
 
 ### 查看冲突与未匹配的原因
 
@@ -41,9 +44,10 @@ GPS 目录按 CPR 的 GPS 集成模式纳入常规、自制或第三方合集，
 ```js
 const cpr = game.modules.get("cpr-zh-aliases")?.api?.report;
 const gps = game.modules.get("gps-zh-aliases")?.api?.report;
-console.log(cpr, gps);
+const misc = game.modules.get("misc-zh-aliases")?.api?.report;
+console.log(cpr, gps, misc);
 
-// CPR 使用一个全局计划；GPS 按规则代际和查找类型保存计划。
+// CPR 使用一个全局计划；GPS 与 MISC 各自按规则代际和查找类型保存计划。
 cpr?.clusterErrors?.filter(error =>
   error.members.some(member => member.displayName.includes("剑刃防护")));
 gps?.scopes?.filter(entry => entry.scope.rules === "2024" && entry.scope.type === "feat");
@@ -60,11 +64,11 @@ gps?.scopes?.filter(entry => entry.scope.rules === "2024" && entry.scope.type ==
 
 共享核心将原 CPR 专用分类 `multiple-cpr-targets` 改为 `multiple-lookup-targets`。历史评估记录保留当时字段和计数；拆分不会自动解决那些条目。
 
-CPR 报告的 `registered` 是本次实际新增映射数；共享计划的 `planned` 是可用别名数。GPS 不注册全局映射，`scopes[].planned` 表示对应模式和上下文下的计划覆盖数，不是实际查找命中次数。`existing`、`unsupported` 分别记录已存在的名称和未命中目录的名称。GPS 模式切换后可增加新的作用域报告，各作用域数量可能重复，不能相加当作独立条目数。
+CPR 报告的 `registered` 是本次实际新增映射数；共享计划的 `planned` 是可用别名数。GPS 与 MISC 不注册全局映射，`scopes[].planned` 表示对应模式和上下文下的计划覆盖数，不是实际查找命中次数。`existing`、`unsupported` 分别记录已存在的名称和未命中目录的名称。GPS 或 MISC 模式切换后可增加新的作用域报告，各作用域数量可能重复，不能相加当作独立条目数。
 
-`source-error` 表示当前构建失败，`source` 指明译表、索引或 `truesight`。CPR 不写入部分结果；GPS 在构建失败后仅保留原查找。`unsupported-core`、`unsupported-cpr`、`unsupported-gps-entry` 表示对应接口不可用；`no-visible-candidates` 表示 CPR 没有可见候选来源。GPS 的重试错误单独保存在 `api.lastLookupError`，原查找结果不受影响。
+`source-error` 表示当前构建失败，`source` 指明译表、索引或 `truesight`。CPR 不写入部分结果；GPS 与 MISC 在构建失败后仅保留原查找。`unsupported-core`、`unsupported-cpr`、`unsupported-gps-entry`、`unsupported-misc-entry` 表示对应接口不可用；`no-visible-candidates` 表示 CPR 没有可见候选来源。GPS 与 MISC 的重试错误单独保存在 `api.lastLookupError`，原查找结果不受影响。
 
-GPS 诊断接口还提供：
+GPS 与 MISC 均提供以下诊断接口（MISC 使用 `misc-zh-aliases`）：
 
 ```js
 await game.modules.get("gps-zh-aliases").api.refresh(); // 重新读取快照并构建计划
@@ -82,6 +86,7 @@ game.modules.get("gps-zh-aliases").api.stop();
 modules/
   cpr-zh-aliases/    # 可安装的 CPR 适配插件
   gps-zh-aliases/    # 可安装的 GPS 适配插件
+  misc-zh-aliases/   # 可安装的 MISC 适配插件
   # 每个目录都有自己的 module.json 和 scripts/
 tests/              # 适配、生命周期、打包及可选本机源码回放
 tools/             # 检查和独立插件发行工具
@@ -105,9 +110,10 @@ modules="$HOME/Library/Application Support/FoundryVTT/Data/modules"
 CPR_MODULES_DIR="$modules" npm test
 ```
 
-`CPR_MODULES_DIR` 启用 CPR 自有查找及 Medkit→GPS 查找回放，读取已安装 CPR 的 source map 和汉化标题索引。两项均使用内存合集夹具，不连接世界；未提供路径时跳过对应回放。它们不能代替部署后的实机 Medkit 检查。
+`CPR_MODULES_DIR` 启用 CPR 自有查找及 Medkit→GPS、Medkit→MISC 查找回放，读取已安装 CPR 的 source map 和汉化标题索引。这些回放均使用内存合集夹具，不连接世界；未提供路径时跳过对应回放。它们不能代替部署后的实机 Medkit 检查。
 
 当前打包输出为：
 
 - `dist/cpr-zh-aliases-v0.3.1.zip`
 - `dist/gps-zh-aliases-v0.3.1.zip`
+- `dist/misc-zh-aliases-v0.1.1.zip`
