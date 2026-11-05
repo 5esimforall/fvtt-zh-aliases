@@ -1,11 +1,32 @@
-.truesight-review { --ts-bg:#eeecef; --ts-card:#ffffff90; --ts-text:#302b35; --ts-muted:#706976; --ts-line:#30283126; --ts-accent:#725785; color:var(--ts-text); background:var(--ts-bg); }
-.truesight-review .window-header { background:#e3dfe7; color:var(--ts-text); }
-.truesight-review .window-content { padding:14px; overflow:hidden; color:var(--ts-text); background:var(--ts-bg); color-scheme:light; }
+.truesight-review {
+  /* Match Slow Insert while remaining independent of its stylesheet. */
+  color-scheme: var(--color-scheme, light);
+  --ts-bg: var(--qiBackground, light-dark(#dddddde3, #302831e3));
+  --ts-border: var(--qiBorderColor, #493a50);
+  --ts-line: color-mix(in srgb, var(--ts-text) 18%, transparent);
+  --ts-text: var(--color-text-primary, light-dark(#302831, #efe6d8));
+  --ts-muted: light-dark(#666666, #b6aebc);
+  --ts-accent: light-dark(var(--qiFilterAccent, #454159), #c6b5d7);
+  --ts-field: light-dark(#ffffff50, #00000022);
+  --ts-hover: var(--qiItemHoverColor, light-dark(#99944e29, #9979b924));
+  --ts-selected: var(--qiItemSelectedColor, light-dark(#99944e29, #b3a0c624));
+  --ts-selected-hover: var(--qiItemSelectedHoverColor, light-dark(#99944e3d, #9979b924));
+  --ts-focus: var(--qiBorderColorFocused, #624670);
+  --ts-warning: light-dark(#8b5b25, #e1b879);
+  --ts-danger: light-dark(#9a4352, #e39aa7);
+  --ts-preferred: light-dark(#88631f, #e3c278);
+  --ts-primary-text: light-dark(#ffffff, #302831);
+  color:var(--ts-text); background:var(--ts-bg);
+}
+.truesight-review .window-header { background:var(--ts-field); color:var(--ts-text); }
+.truesight-review .window-content { padding:14px; overflow:hidden; color:var(--ts-text); background:var(--ts-bg); }
 .truesight-review .ts-review { display:flex; flex-direction:column; gap:10px; height:100%; min-height:0; }
-.truesight-review :is(button,input) { color:var(--ts-text); background:var(--ts-card); border:1px solid var(--ts-line); border-radius:5px; font:inherit; }
+.truesight-review :is(button,input,select) { color:var(--ts-text); background:var(--ts-field); border:1px solid var(--ts-line); border-radius:5px; font:inherit; }
 .truesight-review button { width:auto; min-height:30px; padding:5px 10px; cursor:pointer; box-shadow:none; }
-.truesight-review button:hover:not(:disabled), .truesight-review button[aria-pressed=true] { background:#72578519; border-color:var(--ts-accent); }
-.truesight-review button:focus-visible, .truesight-review input:focus-visible, .truesight-review summary:focus-visible { outline:2px solid var(--ts-accent); outline-offset:2px; }
+.truesight-review button:hover:not(:disabled) { background:var(--ts-hover); border-color:var(--ts-accent); }
+.truesight-review button[aria-pressed=true] { background:var(--ts-selected); border-color:var(--ts-accent); }
+.truesight-review button[aria-pressed=true]:hover:not(:disabled) { background:var(--ts-selected-hover); }
+.truesight-review button:focus-visible, .truesight-review input:focus-visible, .truesight-review select:focus-visible, .truesight-review summary:focus-visible { outline:2px solid var(--ts-focus); outline-offset:2px; }
 .truesight-review button:disabled { opacity:.45; cursor:default; }
 .truesight-review [hidden] { display:none!important; }
 .truesight-review :is(p,h2,h3) { margin:0; overflow-wrap:anywhere; }
@@ -20,7 +41,7 @@
 .truesight-review .ts-options label { display:flex; align-items:center; gap:6px; max-width:260px; font-size:12px; }
 .truesight-review .ts-options button { display:block; width:100%; margin-top:4px; }
 .truesight-review .ts-message { font-size:12px; color:var(--ts-muted); }
-.truesight-review .ts-error { color:#a73333; font-size:12px; }
+.truesight-review .ts-error { color:var(--ts-danger); font-size:12px; }
 .truesight-review .ts-error:empty { display:none; }
 .truesight-review .ts-filters button { font-size:11px; padding:3px 8px; min-height:26px; }
 .truesight-review input[type=search] { width:100%; padding:7px 10px; flex:none; }
@@ -31,14 +52,21 @@
 .truesight-review .ts-row strong { overflow-wrap:anywhere; }
 .truesight-review .ts-row span { color:var(--ts-muted); font-size:11px; }
 .truesight-review .ts-pagination { justify-content:center; padding:7px; border-top:1px solid var(--ts-line); font-size:11px; }
-.truesight-review .ts-detail { min-width:0; overflow:auto; padding:18px; display:flex; flex-direction:column; gap:10px; background:var(--ts-card); }
+.truesight-review .ts-detail { min-width:0; overflow:auto; padding:18px; display:flex; flex-direction:column; gap:10px; background:var(--ts-field); }
 .truesight-review .ts-member { border-bottom:1px solid var(--ts-line); padding:10px 0; }
 .truesight-review .ts-member p { color:var(--ts-muted); font-size:12px; margin:5px 0; }
 .truesight-review .ts-member details { font-size:11px; color:var(--ts-muted); }
 .truesight-review .ts-member summary { cursor:pointer; }
 .truesight-review code { display:block; overflow-wrap:anywhere; white-space:normal; padding:6px 0; }
-.truesight-review .ts-risk { padding:10px; border-left:3px solid #bd843a; background:#bd843a15; font-size:12px; }
+.truesight-review .ts-risk { padding:10px; border-left:3px solid var(--ts-warning); background:color-mix(in srgb, var(--ts-warning) 9%, transparent); font-size:12px; }
 .truesight-review .ts-footer { flex:none; justify-content:space-between; border-top:1px solid var(--ts-line); padding-top:10px; font-size:12px; }
-.truesight-review .ts-primary { background:var(--ts-accent); color:white; border-color:var(--ts-accent); }
-.truesight-review .ts-primary:hover:not(:disabled) { background:#604571; color:white; }
+.truesight-review .ts-primary { background:var(--ts-accent); color:var(--ts-primary-text); border-color:var(--ts-accent); }
+.truesight-review .ts-primary:hover:not(:disabled) { background:color-mix(in srgb, var(--ts-accent) 85%, var(--ts-primary-text)); color:var(--ts-primary-text); }
 @media(max-width:600px) { .truesight-review .ts-body { grid-template-columns:minmax(120px,.7fr) minmax(160px,1fr); } .truesight-review .ts-detail { padding:10px; } }
+
+.truesight-review .window-header :is(.window-title,.header-control) { color:var(--ts-text); text-shadow:none; }
+.truesight-review .window-header .header-control:hover { background:var(--ts-hover); }
+.truesight-review .window-resize-handle { color:var(--ts-muted); }
+.truesight-review input[type=checkbox] { accent-color:var(--ts-accent); }
+.truesight-review select option { color:var(--ts-text); background:light-dark(#eeeeee,#302831); }
+.truesight-review code { color:var(--ts-text); background:var(--ts-field); }
