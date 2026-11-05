@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {readModules, root} from './workspace.mjs';
 
+import {syncShared} from './build.mjs';
+
 export async function packageModules(destination = join(root, 'dist')) {
+  await syncShared({check: true});
   const archives = [];
   await mkdir(destination, {recursive: true});
   for (const {directory, manifest: {id, version}} of await readModules()) {

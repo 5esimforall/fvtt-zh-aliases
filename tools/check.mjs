@@ -2,8 +2,11 @@ import {execFileSync} from 'node:child_process';
 import {join} from 'node:path';
 import {readModules, files, root} from './workspace.mjs';
 
+import {syncShared} from './build.mjs';
+
+await syncShared({check: true});
 const modules = await readModules();
-for (const directory of ['modules', 'tools', 'tests']) {
+for (const directory of ['shared', 'modules', 'tools', 'tests']) {
   for await (const path of files(join(root, directory))) {
     if (path.endsWith('.mjs')) execFileSync(process.execPath, ['--check', path], {stdio: 'inherit'});
   }

@@ -42,17 +42,3 @@ export function catalogContext(packs, automations) {
   }
   return {folders, automations};
 }
-
-export function lookupScope(item, options, core, itemTypes) {
-  const rules = core.rulesEdition(options.rules ?? 'legacy');
-  if (!rules) return null;
-  // Match Medkit's actor classification; monster identity translation is not
-  // covered. NPC spells still use the ordinary spell catalog, as CPR does.
-  let actorType = item.actor?.type ?? 'character';
-  if (actorType !== 'character' && actorType !== 'npc') return null;
-  if (item.actor?.items?.find(entry => entry.type === 'class')) actorType = 'character';
-  if (actorType === 'npc' && item.type !== 'spell') return null;
-  const type = item.type === 'spell' || item.type === 'feat' ? item.type
-    : itemTypes.includes(item.type) ? 'item' : null;
-  return type ? {rules, type, types: type === 'item' ? [...itemTypes] : [type]} : null;
-}

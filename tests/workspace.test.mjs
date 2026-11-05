@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile, mkdtemp, rm} from 'node:fs/promises';
+import {readFile, writeFile, mkdir, mkdtemp, rm} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join, resolve, relative} from 'node:path';
 import {readModules, files, root} from '../tools/workspace.mjs';
 import {packageModules} from '../tools/package.mjs';
+import {syncShared, sharedFiles, sharedConsumers} from '../tools/build.mjs';
 
 test('three adapters depend on the independent Truesight foundation', async () => {
   const modules = await readModules();
@@ -42,6 +43,27 @@ test('each ZIP contains its own manifest and runtime without relying on the repo
     const packed = JSON.parse(execFileSync('unzip', ['-p', archive, manifest.id + '/module.json'], {encoding: 'utf8'}));
     assert.deepEqual(packed, manifest);
     assert.ok(listing.includes(manifest.id + '/scripts/main.mjs'));
+    if (sharedConsumers.includes(manifest.id)) for (const file of sharedFiles) {
+      const bundled = execFileSync('unzip', ['-p', archive, manifest.id + '/scripts/shared/' + file], {encoding: 'utf8'});
+      assert.equal(bundled, await readFile(join(root, 'modules', manifest.id, 'scripts/shared', file), 'utf8'));
+    }
     assert.ok(!listing.some(path => path.includes('/tests/') || path.endsWith('.DS_Store')));
   }
+});
+
+
+test('shared runtime copies are generated from one source and stale or missing output is rejected', async t => {
+  await syncShared({check: true});
+  const workspaceRoot = await mkdtemp(join(tmpdir(), 'zh-aliases-build-test-'));
+  t.after(() => rm(workspaceRoot, {recursive: true, force: true}));
+  await mkdir(join(workspaceRoot, 'shared'));
+  for (const file of sharedFiles) await writeFile(join(workspaceRoot, 'shared', file), 'export const fixture = true;\n');
+  await assert.rejects(syncShared({workspaceRoot, check: true}), /Stale shared runtime/);
+  await syncShared({workspaceRoot});
+  await syncShared({workspaceRoot, check: true});
+  const target = join(workspaceRoot, 'modules', sharedConsumers[0], 'scripts/shared', sharedFiles[0]);
+  await writeFile(target, 'stale');
+  await assert.rejects(syncShared({workspaceRoot, check: true}), /Stale shared runtime/);
+  await syncShared({workspaceRoot});
+  await syncShared({workspaceRoot, check: true});
 });

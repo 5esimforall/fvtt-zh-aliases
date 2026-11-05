@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import {core} from '../../truesight/module/scripts/names/api.mjs';
 import {BASE_ITEM_PACKS} from '../../truesight/module/scripts/names/translations.mjs';
 import {activate} from '../modules/gps-zh-aliases/scripts/runtime.mjs';
-import {installLookupFallback} from '../modules/gps-zh-aliases/scripts/lookup.mjs';
+import {installLookupFallback as installSharedLookup} from '../modules/gps-zh-aliases/scripts/shared/medkit-lookup.mjs';
+const installLookupFallback = options => installSharedLookup({...options, source: 'gambits-premades'});
 import {activate as activateCPR} from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
 
 function client() {
@@ -18,14 +19,16 @@ function client() {
   const settings = {gambitPremades: 1, additionalCompendiums: {'chris-premades': 0, 'gambits-premades': 10}};
   const calls = [];
   const itemTypes = ['weapon', 'equipment', 'consumable', 'tool', 'backpack', 'loot'];
-  const native = async (item, options) => {
+  const native = async (item, options = {}) => {
     calls.push({name: item.name, rules: options.rules, actor: item.actor});
     if (!Object.hasOwn(settings.additionalCompendiums, 'gambits-premades')) return [];
     const doc = docs.find(doc => doc.name === item.name && doc.system.source.rules === core.rulesEdition(options.rules ?? 'legacy'));
     return doc ? [{document: doc, source: 'gambits-premades', priority: 10, version: 'fixture'}] : [];
   };
-  const compendiumUtils = {getAllAutomations: native, getGPSAutomation: async () => {}};
-  const cpr = {utils: {compendiumUtils, constants: {itemTypes}, genericUtils: {getCPRSetting: key => settings[key]}}};
+  const preferred = async (item, options) => (await native(item, options))[0]?.document;
+  const compendiumUtils = {getAllAutomations: native, getGPSAutomation: async () => {},
+    getPreferredAutomation: preferred, getAppliedOrPreferredAutomation: preferred};
+  const cpr = {utils: {compendiumUtils, itemUtils: {getSource: () => undefined}, constants: {itemTypes}, genericUtils: {getCPRSetting: key => settings[key]}}};
   const localItems = [];
   const loadCorpus = () => core.readCorpus({packs, localItems, loadTitleIndex: async () => titleIndex,
     loadGrouping: () => items => new Map(items.map(i => [i.uuid, {key: null}]))});
@@ -46,12 +49,15 @@ test('GPS alone recognizes Chinese and bilingual Indomitable with native UUIDs, 
         const item = feat(name);
         const [result] = await env.compendiumUtils.getAllAutomations(item, {rules});
         assert.equal(result.document, control.document);
+        assert.equal(await env.compendiumUtils.getPreferredAutomation(item, {rules}), control.document);
+        assert.equal(await env.compendiumUtils.getAppliedOrPreferredAutomation(item, {rules}), control.document);
         assert.equal(result.source, 'gambits-premades');
         assert.equal(result.version, 'fixture');
         assert.equal(item.name, name);
       }
     }
     assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('未知不屈')), []);
+    assert.equal(await env.compendiumUtils.getPreferredAutomation(feat('未知不屈')), undefined);
     api.stop();
     assert.equal(env.compendiumUtils.getAllAutomations, env.native);
     assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('不屈'), {}), []);
@@ -99,6 +105,8 @@ test('conflicting translations fail closed and a failed refresh discards the pre
   const api = await activate(env);
   assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('不屈')), []);
   assert.equal(api.report.scopes.find(s => s.scope.type === 'feat' && s.scope.rules === '2014').conflicts[0].reason, 'ambiguous-name');
+  assert.equal(await env.compendiumUtils.getPreferredAutomation(feat('不屈')), undefined);
+  assert.equal(await env.compendiumUtils.getAppliedOrPreferredAutomation(feat('不屈')), undefined);
   delete env.titleIndex['dnd5e.classes24'].titles['Other Feature'];
   await api.refresh();
   assert.equal((await env.compendiumUtils.getAllAutomations(feat('不屈')))[0].document, env.docs[0]);
