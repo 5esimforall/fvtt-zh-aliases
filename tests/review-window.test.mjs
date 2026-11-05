@@ -20,6 +20,7 @@ test('review opens current state without calculating, previews explicitly, and a
  let hook;globalThis.Hooks={on:(_,cb)=>{hook=cb;return 1;},off:()=>{}};
  const service=fixture();let calculations=0;const calculate=service.preview.bind(service);service.preview=(...args)=>{calculations++;return calculate(...args);};connectCatalog(service);
  const Window=reviewWindowClass(),root=await new Window()._renderHTML();
+ assert.equal(root.children[0].children[0].className,'ts-tabs');
  const find=key=>descendants(root).find(n=>n.tag==='button'&&n.textContent==='TRUESIGHT.'+key);
  assert.equal(calculations,0);assert.equal(find('UI.Apply').hidden,true);
  await find('UI.Recalculate').onclick();assert.equal(calculations,1);assert.equal(service.getStatus().reviewed,false);assert.equal(find('UI.Apply').hidden,false);

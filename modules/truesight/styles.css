@@ -92,3 +92,12 @@
 .truesight-review .ts-review .ts-row { width:100%; border-color:transparent; background:transparent; }
 .truesight-review .ts-review .ts-row[aria-pressed=true] { background:var(--ts-selected); border-color:var(--ts-accent); }
 .truesight-review .ts-review .ts-row:hover:not(:disabled) { background:var(--ts-hover); }
+
+/* Disclosure geometry stays fixed; only the chevron rotates. */
+.truesight-review .ts-review details > summary { display:flex; align-items:center; gap:6px; list-style:none; }
+.truesight-review .ts-review details > summary::marker { content:""; }
+.truesight-review .ts-review details > summary::-webkit-details-marker { display:none; }
+.truesight-review .ts-review details > summary::before { content:""; display:block; flex:0 0 10px; width:10px; height:10px; background:currentColor; clip-path:polygon(30% 10%, 70% 50%, 30% 90%, 18% 78%, 46% 50%, 18% 22%); transform:rotate(0deg); transform-origin:center; }
+.truesight-review .ts-review details[open] > summary::before { transform:rotate(90deg); }
+
+.truesight-review .ts-toolbar > .ts-tabs { margin-right:auto; flex:0 0 auto; flex-wrap:nowrap; }

@@ -31,7 +31,7 @@ export function reviewWindowClass() {
    const restore=button('Grouping.RestoreExcluded',async()=>{await catalog.restoreExcluded();resetPreview();load();});
    const excluded=button('UI.Excluded',()=>{mode='current';filter='excluded';page=0;selected=null;render();});
    const more=node('details',null,'ts-options');const moreMenu=node('div',null,'ts-menu');moreMenu.append(excluded,undo,restore);more.append(node('summary',t('UI.More')),moreMenu);
-   toolbar.append(options,rebuild,more);tabs.append(current,pending);
+   tabs.append(current,pending);toolbar.append(tabs,options,rebuild,more);
    const choices=['all','changes','added','adjusted','removed','risk','independent'];const filterButtons=new Map();
    for(const key of choices){const b=button(`UI.Filter.${key}`,()=>{filter=key;page=0;selected=null;render();});filterButtons.set(key,b);filters.append(b);}
    const prev=button('UI.Previous',()=>{page--;render();}), next=button('UI.Next',()=>{page++;render();}), pageLabel=node('span');pagination.append(prev,pageLabel,next);
@@ -78,7 +78,7 @@ export function reviewWindowClass() {
    };
    reason.onchange=()=>{page=0;selected=null;render();};
    search.oninput=()=>{page=0;selected=null;render();};risk.onchange=()=>{if(preview){resetPreview();render();error.textContent=t('UI.Stale');}};
-   rail.append(list,pagination);body.append(rail,detail);actions.append(discard,apply);footer.append(summary,actions);root.append(toolbar,tabs,message,search,filters,reason,error,body,footer);
+   rail.append(list,pagination);body.append(rail,detail);actions.append(discard,apply);footer.append(summary,actions);root.append(toolbar,message,search,filters,reason,error,body,footer);
    if(this.reviewHook)Hooks.off('truesightChanged',this.reviewHook);
    this.reviewHook=Hooks.on('truesightChanged',()=>{const stale=Boolean(preview);resetPreview();load();if(stale&&!busy)error.textContent=t('UI.Stale');});
    for(const menu of [options,more])menu.ontoggle=()=>{if(menu.open)for(const other of [options,more])if(other!==menu)other.open=false;};
