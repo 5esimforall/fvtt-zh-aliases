@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check module/scripts/main.mjs && node --check module/scripts/runtime.mjs && node --check module/scripts/translations.mjs && node --check module/scripts/aliases.mjs && node --check tools/package.mjs",
+    "check": "node --check module/scripts/main.mjs && node --check module/scripts/runtime.mjs && node --check module/scripts/translations.mjs && node --check module/scripts/aliases.mjs && node --check module/scripts/groups.mjs && node --check tools/package.mjs",
     "package": "node tools/package.mjs"
   }
 }

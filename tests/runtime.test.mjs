@@ -1,3 +1,4 @@
+import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activate } from '../module/scripts/runtime.mjs';
@@ -25,7 +26,8 @@ function client() {
       'Legacy Action': '替代动作', 'Another Name': '既有名称'};
     return index;
   }
-  return {renamedItems: table, packs, cpr, loadTitleIndex, calls, requested, docs};
+  const loadGrouping = () => items => new Map(items.map(i => [i.uuid, {key:null}]));
+  return {loadGrouping, renamedItems: table, packs, cpr, loadTitleIndex, calls, requested, docs};
 }
 
 test('builds on each client, deduplicates pack reads and respects visibility, names and aliases', async () => {
@@ -74,7 +76,7 @@ test('additional visible Item sources can reveal conflicts; Actor, hidden pack a
   const titleIndex = await env.loadTitleIndex();
   for (const [id, documentName, visible] of [['extra.spells', 'Item', true],
     ['extra.actors', 'Actor', true], ['extra.private', 'Item', false]]) {
-    env.packs.set(id, {documentName, visible});
+    env.packs.set(id, {documentName, visible, getIndex: async () => []});
     titleIndex[id] = {titles: {'Other Action': '灵巧动作'}, folders: {'Spells': '迷踪步'}};
   }
   titleIndex['extra.spells'].titles = {'Other Step': '迷踪步'};
@@ -90,9 +92,12 @@ test('Foundry entry point waits for cprReady on a non-GM client and uses the con
   const env = client(), events = new Map(), self = {};
   const deps = {
     Hooks: {once: (event, callback) => events.set(event, callback)},
-    game: {user: {isGM: false}, modules: new Map([['cpr-zh-aliases', self]]), packs: env.packs},
+    game: {user: {isGM: false}, modules: new Map([['cpr-zh-aliases', self], ['slow-insert', {active:true, version:'9.0.0'}]]), packs: env.packs},
     chrisPremades: env.cpr, CONFIG: {chrisPremades: {renamedItems: env.renamedItems}},
-    foundry: {utils: {getRoute: path => '/table/' + path}},
+    location: {href:'http://localhost/table/game'},
+    foundry: {utils: {getRoute: path => path === 'modules/slow-insert/scripts/grouping.mjs'
+      ? 'data:text/javascript,export function buildGroupingCatalog(){return {entries:new Map()}}'
+      : '/table/' + path}},
     fetch: async path => {
       assert.equal(path, '/table/modules/dnd-simplified-chinese-babele-patch/translation/cn/titles.json');
       return {ok: true, json: env.loadTitleIndex};
@@ -108,4 +113,46 @@ test('Foundry entry point waits for cprReady on a non-GM client and uses the con
   assert.equal(self.api.report.status, 'waiting-for-cpr'); assert.deepEqual(env.requested, []);
   await events.get('cprReady')();
   assert.equal(self.api.report.status, 'ready'); assert.equal(env.renamedItems.迷踪步, 'Misty Step');
+});
+
+test('a conflicting CPR flag on a non-CPR member blocks all its siblings without affecting unrelated lookups', async () => {
+  const env = client();
+  const rows = [{_id:'a',name:'迷踪步 misty step',type:'spell'},
+    {_id:'b',name:'另一个译名',type:'spell',flags:{'chris-premades':{info:{identifier:'cunningAction',rules:'modern'}}}}];
+  env.packs.set('extra.spells',{visible:true,documentName:'Item',getIndex:async()=>rows});
+  const report = await activate({...env,loadGrouping:()=>items=>new Map(items.map(i=>[i.uuid,{key:'fixture-group'}]))});
+  assert.equal(report.grouping,'slow-insert');
+  assert.equal(report.status,'cluster-conflict');
+  assert.deepEqual(report.clusterErrors[0].candidates.map(c=>c.englishName),['Cunning Action','Misty Step']);
+  assert.equal(env.renamedItems['另一个译名'],undefined);
+  assert.equal(env.renamedItems['迷踪步 misty step'],undefined);
+  assert.equal(env.renamedItems['灵巧动作'],'Cunning Action');
+});
+
+test('Slow Insert is required without a version constraint', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../module/module.json', import.meta.url)));
+  assert.deepEqual(manifest.relationships.requires.filter(r => r.id === 'slow-insert'),
+    [{id:'slow-insert', type:'module'}]);
+});
+
+test('missing, inactive or incompatible Slow Insert never falls back to individual aliases', async t => {
+  const modules = new Map();
+  const {loadGrouping} = await import('../module/scripts/groups.mjs');
+  for (const [key,value] of Object.entries({game:{modules}, location:{href:'http://localhost/game'},
+    foundry:{utils:{getRoute:()=>'data:text/javascript,export const unrelated = true'}}})) {
+    const before = Object.getOwnPropertyDescriptor(globalThis,key);
+    Object.defineProperty(globalThis,key,{value,configurable:true});
+    t.after(()=>before ? Object.defineProperty(globalThis,key,before) : delete globalThis[key]);
+  }
+  const env = client();
+  for (const active of [undefined, false, true]) {
+    if (active !== undefined) modules.set('slow-insert',{active});
+    const r = await activate({...env,loadGrouping});
+    assert.equal(r.status,'source-error'); assert.equal(r.source,'slow-insert');
+    assert.match(r.detail, active ? /buildGroupingCatalog/ : /not active/);
+  }
+  assert.deepEqual(env.calls, []);
+  const r = await activate({...env,loadGrouping:()=>()=>undefined});
+  assert.equal(r.status,'source-error'); assert.equal(r.source,'slow-insert');
+  assert.deepEqual(env.renamedItems,{});
 });
