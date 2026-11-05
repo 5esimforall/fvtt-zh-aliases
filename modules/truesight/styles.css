@@ -1,8 +1,44 @@
-.truesight-review .window-content { padding: 12px; overflow: auto; }
-.truesight-review .window-content > div { display: flex; flex-direction: column; gap: 8px; }
-.truesight-review p { margin: 4px 0; overflow-wrap: anywhere; color: inherit; }
-.truesight-review details { margin: 8px 0; padding: 6px; border: 1px solid var(--color-border-light-2, #7776); border-radius: 4px; }
-.truesight-review details p { padding-left: 12px; font-size: .9em; }
-.truesight-review summary { cursor: pointer; }
-.truesight-review label { display: flex; align-items: center; gap: 8px; }
-.truesight-review [role=alert] { color: var(--color-level-error, #bd3636); }
+.truesight-review { --ts-bg:#eeecef; --ts-card:#ffffff90; --ts-text:#302b35; --ts-muted:#706976; --ts-line:#30283126; --ts-accent:#725785; color:var(--ts-text); background:var(--ts-bg); }
+.truesight-review .window-header { background:#e3dfe7; color:var(--ts-text); }
+.truesight-review .window-content { padding:14px; overflow:hidden; color:var(--ts-text); background:var(--ts-bg); color-scheme:light; }
+.truesight-review .ts-review { display:flex; flex-direction:column; gap:10px; height:100%; min-height:0; }
+.truesight-review :is(button,input) { color:var(--ts-text); background:var(--ts-card); border:1px solid var(--ts-line); border-radius:5px; font:inherit; }
+.truesight-review button { width:auto; min-height:30px; padding:5px 10px; cursor:pointer; box-shadow:none; }
+.truesight-review button:hover:not(:disabled), .truesight-review button[aria-pressed=true] { background:#72578519; border-color:var(--ts-accent); }
+.truesight-review button:focus-visible, .truesight-review input:focus-visible, .truesight-review summary:focus-visible { outline:2px solid var(--ts-accent); outline-offset:2px; }
+.truesight-review button:disabled { opacity:.45; cursor:default; }
+.truesight-review [hidden] { display:none!important; }
+.truesight-review :is(p,h2,h3) { margin:0; overflow-wrap:anywhere; }
+.truesight-review p { line-height:1.5; }
+.truesight-review h2 { font-size:20px; border:0; }
+.truesight-review h3 { font-size:13px; margin-top:10px; border:0; }
+.truesight-review :is(.ts-toolbar,.ts-tabs,.ts-filters,.ts-actions,.ts-pagination,.ts-footer) { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.truesight-review .ts-toolbar > strong { margin-right:auto; }
+.truesight-review .ts-options { position:relative; }
+.truesight-review .ts-options summary { cursor:pointer; padding:6px; }
+.truesight-review .ts-options[open] { padding:6px; border:1px solid var(--ts-line); border-radius:5px; }
+.truesight-review .ts-options label { display:flex; align-items:center; gap:6px; max-width:260px; font-size:12px; }
+.truesight-review .ts-options button { display:block; width:100%; margin-top:4px; }
+.truesight-review .ts-message { font-size:12px; color:var(--ts-muted); }
+.truesight-review .ts-error { color:#a73333; font-size:12px; }
+.truesight-review .ts-error:empty { display:none; }
+.truesight-review .ts-filters button { font-size:11px; padding:3px 8px; min-height:26px; }
+.truesight-review input[type=search] { width:100%; padding:7px 10px; flex:none; }
+.truesight-review .ts-body { display:grid; grid-template-columns:minmax(180px, .8fr) minmax(240px,1.2fr); flex:1; min-height:0; border:1px solid var(--ts-line); border-radius:7px; overflow:hidden; }
+.truesight-review .ts-rail { display:flex; flex-direction:column; min-height:0; min-width:0; border-right:1px solid var(--ts-line); }
+.truesight-review .ts-list { flex:1; overflow:auto; padding:6px; min-height:0; }
+.truesight-review .ts-row { display:flex; flex-direction:column; align-items:flex-start; gap:5px; text-align:left; width:100%; margin:0 0 4px; padding:10px; }
+.truesight-review .ts-row strong { overflow-wrap:anywhere; }
+.truesight-review .ts-row span { color:var(--ts-muted); font-size:11px; }
+.truesight-review .ts-pagination { justify-content:center; padding:7px; border-top:1px solid var(--ts-line); font-size:11px; }
+.truesight-review .ts-detail { min-width:0; overflow:auto; padding:18px; display:flex; flex-direction:column; gap:10px; background:var(--ts-card); }
+.truesight-review .ts-member { border-bottom:1px solid var(--ts-line); padding:10px 0; }
+.truesight-review .ts-member p { color:var(--ts-muted); font-size:12px; margin:5px 0; }
+.truesight-review .ts-member details { font-size:11px; color:var(--ts-muted); }
+.truesight-review .ts-member summary { cursor:pointer; }
+.truesight-review code { display:block; overflow-wrap:anywhere; white-space:normal; padding:6px 0; }
+.truesight-review .ts-risk { padding:10px; border-left:3px solid #bd843a; background:#bd843a15; font-size:12px; }
+.truesight-review .ts-footer { flex:none; justify-content:space-between; border-top:1px solid var(--ts-line); padding-top:10px; font-size:12px; }
+.truesight-review .ts-primary { background:var(--ts-accent); color:white; border-color:var(--ts-accent); }
+.truesight-review .ts-primary:hover:not(:disabled) { background:#604571; color:white; }
+@media(max-width:600px) { .truesight-review .ts-body { grid-template-columns:minmax(120px,.7fr) minmax(160px,1fr); } .truesight-review .ts-detail { padding:10px; } }

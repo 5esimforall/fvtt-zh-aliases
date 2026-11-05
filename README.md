@@ -109,6 +109,6 @@ CPR_MODULES_DIR="$modules" npm test
 
 当前打包输出为：
 
-- `dist/truesight-v0.1.1.zip`
+- `dist/truesight-v0.1.2.zip`
 - `dist/cpr-zh-aliases-v0.3.1.zip`
 - `dist/gps-zh-aliases-v0.3.1.zip`
