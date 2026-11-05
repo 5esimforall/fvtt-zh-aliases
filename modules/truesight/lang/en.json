@@ -115,5 +115,19 @@
   "TRUESIGHT.UI.Change.removed": "Dissolved",
   "TRUESIGHT.UI.Change.independent": "Independent",
   "TRUESIGHT.UI.ReasonFilter": "Independence reason",
-  "TRUESIGHT.UI.AllReasons": "All reasons"
+  "TRUESIGHT.UI.AllReasons": "All reasons",
+  "TRUESIGHT.UI.Source.unknown": "Unknown source",
+  "TRUESIGHT.UI.Source.edition-unknown": "Unknown edition",
+  "TRUESIGHT.UI.Source.ambiguous": "Ambiguous source",
+  "TRUESIGHT.UI.Source.partial": "Partial source",
+  "TRUESIGHT.UI.Source.edition-conflict": "Edition conflict",
+  "TRUESIGHT.UI.Source.source-conflict": "Source conflict",
+  "TRUESIGHT.UI.School.abj": "Abjuration",
+  "TRUESIGHT.UI.School.con": "Conjuration",
+  "TRUESIGHT.UI.School.div": "Divination",
+  "TRUESIGHT.UI.School.enc": "Enchantment",
+  "TRUESIGHT.UI.School.evo": "Evocation",
+  "TRUESIGHT.UI.School.ill": "Illusion",
+  "TRUESIGHT.UI.School.nec": "Necromancy",
+  "TRUESIGHT.UI.School.trs": "Transmutation"
 }

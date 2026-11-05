@@ -115,5 +115,19 @@
   "TRUESIGHT.UI.Change.removed": "解散",
   "TRUESIGHT.UI.Change.independent": "独立条目",
   "TRUESIGHT.UI.ReasonFilter": "独立原因",
-  "TRUESIGHT.UI.AllReasons": "全部原因"
+  "TRUESIGHT.UI.AllReasons": "全部原因",
+  "TRUESIGHT.UI.Source.unknown": "来源未知",
+  "TRUESIGHT.UI.Source.edition-unknown": "版次未明",
+  "TRUESIGHT.UI.Source.ambiguous": "来源有歧义",
+  "TRUESIGHT.UI.Source.partial": "部分来源未明",
+  "TRUESIGHT.UI.Source.edition-conflict": "规则代际冲突",
+  "TRUESIGHT.UI.Source.source-conflict": "来源冲突",
+  "TRUESIGHT.UI.School.abj": "防护",
+  "TRUESIGHT.UI.School.con": "咒法",
+  "TRUESIGHT.UI.School.div": "预言",
+  "TRUESIGHT.UI.School.enc": "惑控",
+  "TRUESIGHT.UI.School.evo": "塑能",
+  "TRUESIGHT.UI.School.ill": "幻术",
+  "TRUESIGHT.UI.School.nec": "死灵",
+  "TRUESIGHT.UI.School.trs": "变化"
 }

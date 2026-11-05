@@ -87,6 +87,7 @@ export class CatalogService {
       const group = entry.key && this.state.active?.groups[entry.key];
       entries.set(entry.uuid, {
         uuid: entry.uuid, key: entry.key, type: entry.result.item.subType,
+        img: typeof entry.result.item.img === 'string' ? entry.result.item.img : null,
         kind: entry.kind, rules: entry.rules, warning: entry.warning, risk: entry.risk,
         status: entry.key ? 'member' : entry.warning === 'identity' ? 'invalidated'
           : entry.warning ? 'conflict' : this.state.active?.records[entry.uuid] ? 'independent' : 'pending',
