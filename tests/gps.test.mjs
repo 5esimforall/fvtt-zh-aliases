@@ -7,6 +7,7 @@ import {activate} from '../modules/gps-zh-aliases/scripts/runtime.mjs';
 import {installLookupFallback as installSharedLookup} from '../modules/gps-zh-aliases/scripts/shared/medkit-lookup.mjs';
 const installLookupFallback = options => installSharedLookup({...options, source: 'gambits-premades'});
 import {activate as activateCPR} from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
+import {CatalogService} from '../../truesight/module/scripts/catalog/service.mjs';
 
 function client() {
   const docs = ['2014', '2024'].map((rules, i) => ({_id: 'indomitable' + i, name: 'Indomitable', type: 'feat',
@@ -35,6 +36,53 @@ function client() {
   return {core, cpr, loadCorpus, packs, titleIndex, settings, calls, docs, compendiumUtils, native, localItems};
 }
 const feat = name => Object.freeze({name, type: 'feat'});
+
+test('reviewed feature identity shares English evidence with Chinese copies without changing GPS source or UUID', async t => {
+  const env = client();
+  env.titleIndex['dnd5e.classfeatures'].titles = {};
+  const native = [];
+  for (const [i, rules] of ['2014', '2024'].entries()) {
+    const system = {identifier: 'indomitable', source: {rules}, type: {value: 'class'},
+      requirements: 'Fighter', prerequisites: {level: 9}};
+    env.docs[i].system = structuredClone(system);
+    native.push({_id: 'native' + rules, name: '不屈', type: 'feat', system},
+      {_id: 'bilingual' + rules, name: '不屈 Indomitable', type: 'feat', system: structuredClone(system)},
+      {_id: 'fighter' + rules, name: 'Fighter', type: 'class', system: {identifier: 'fighter', source: {rules}}});
+  }
+  env.packs.set('fixture.features', {visible: true, documentName: 'Item', getIndex: async () => new Map(native.map(row => [row._id, row]))});
+  const rows = [];
+  for (const [packageId, pack] of env.packs) {
+    pack.index = await pack.getIndex();
+    for (const row of pack.index.values()) rows.push({item: {...row, uuid: `Compendium.${packageId}.Item.${row._id}`,
+      package: packageId, documentType: 'Item', subType: row.type}});
+  }
+  const catalog = new CatalogService({index: () => ({results: rows}), environment: () => ({system: {id: 'dnd5e'}, packs: env.packs}),
+    load: () => null, save: async state => state});
+  t.after(() => catalog.dispose());
+  env.loadCorpus = () => core.readCorpus({packs: env.packs, loadTitleIndex: () => env.titleIndex,
+    loadGrouping: () => items => catalog.read(items.map(item => item.uuid)).entries});
+  const before = await activate(env);
+  assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('不屈')), []);
+  before.stop();
+  await catalog.apply(catalog.preview().id);
+  assert.equal(catalog.read().groups.size, 2);
+  for (const doc of env.docs) assert.equal(catalog.getMember(doc.uuid).status, 'member');
+  const api = await activate(env);
+  t.after(() => api.stop());
+  for (const [i, rules] of ['legacy', 'modern'].entries()) {
+    const [control] = await env.compendiumUtils.getAllAutomations(feat('Indomitable'), {rules});
+    for (const name of ['不屈', '不屈 Indomitable']) {
+      const item = feat(name), [result] = await env.compendiumUtils.getAllAutomations(item, {rules});
+      assert.ok(result, `${rules}: ${name}`);
+      assert.equal(result.document.uuid, env.docs[i].uuid);
+      assert.equal(result.document, control.document);
+      assert.equal(result.source, 'gambits-premades');
+      assert.equal(item.name, name);
+    }
+  }
+  api.stop();
+  assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('不屈')), []);
+});
 
 test('GPS alone recognizes Chinese and bilingual Indomitable with native UUIDs, rules and display names unchanged', async () => {
   for (let clientNumber = 0; clientNumber < 2; clientNumber++) {
