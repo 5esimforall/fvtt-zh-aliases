@@ -14,23 +14,12 @@ export async function loadGrouping() {
 }
 
 export const GROUP_FIELDS = ['system.identifier', 'system.source', 'system.school', 'system.level', '_stats.modifiedTime'];
-function nameEvidence(row, source, cpr) {
-  const info = row.flags?.['chris-premades']?.info;
-  const names = new Set();
-  if (info?.identifier) {
-    const edition = info.rules ?? row.system?.source?.rules;
-    const lists = edition === 'legacy' || edition === '2014' ? [cpr.legacyMacros]
-      : edition === 'modern' || edition === '2024' ? [cpr.macros] : [cpr.macros, cpr.legacyMacros];
-    for (const macros of lists) {
-      const name = macros?.[info.identifier]?.name;
-      if (typeof name === 'string') names.add(name);
-    }
-  }
-  return {displayName: row.name, source, originalName: row.flags?.babele?.originalName ?? row.originalName,
-    cprNames: [...names]};
+export function nameEvidence(row, source, extraEvidence = () => []) {
+  return {displayName: row.name, source, type: row.type, rules: row.system?.source?.rules,
+    originalName: row.flags?.babele?.originalName ?? row.originalName, lookupNames: extraEvidence(row)};
 }
 
-export function itemGroups(indexes, catalogFor, localItems, cpr) {
+export function itemGroups(indexes, catalogFor, localItems = [], extraEvidence = () => []) {
   const items = [], rows = new Map();
   for (const [packId, index] of indexes) {
     for (const row of index.values()) {
@@ -53,12 +42,12 @@ export function itemGroups(indexes, catalogFor, localItems, cpr) {
     }
     const key = entry.key;
     if (key || /\p{Script=Han}/u.test(item.name)) {
-      add(key ?? item.uuid, nameEvidence(rows.get(item.uuid), item.uuid, cpr));
+      add(key ?? item.uuid, {...nameEvidence(rows.get(item.uuid), item.uuid, extraEvidence), rules: entry.rules ?? rows.get(item.uuid).system?.source?.rules});
     }
   }
   for (const item of localItems) {
     if (item.uuid && /\p{Script=Han}/u.test(item.name)) {
-      add(item.uuid, nameEvidence(item, item.uuid, cpr));
+      add(item.uuid, nameEvidence(item, item.uuid, extraEvidence));
     }
   }
   return groups;

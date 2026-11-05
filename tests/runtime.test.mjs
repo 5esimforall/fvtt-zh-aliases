@@ -1,8 +1,9 @@
+import {core} from '../modules/zh-aliases-core/scripts/api.mjs';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activate } from '../module/scripts/runtime.mjs';
-import { BASE_ITEM_PACKS } from '../module/scripts/translations.mjs';
+import { activate } from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
+import { BASE_ITEM_PACKS } from '../modules/zh-aliases-core/scripts/translations.mjs';
 
 function client() {
   const calls = [], table = {}, docs = [
@@ -21,13 +22,13 @@ function client() {
   const requested = [];
   async function loadTitleIndex() {
     requested.push('titles');
-    const index = Object.fromEntries(BASE_ITEM_PACKS.map(id => [id, {titles: {}}]));
+    const index = Object.fromEntries([...BASE_ITEM_PACKS,'chris-premades.CPRActions','chris-premades.CPRActions2024'].map(id => [id, {titles: {}}]));
     index['dnd5e.spells'].titles = {'Misty Step': '迷踪步', 'Cunning Action': '灵巧动作',
       'Legacy Action': '替代动作', 'Another Name': '既有名称'};
     return index;
   }
   const loadGrouping = () => items => new Map(items.map(i => [i.uuid, {key:null}]));
-  return {loadGrouping, renamedItems: table, packs, cpr, loadTitleIndex, calls, requested, docs};
+  return {core, loadGrouping, renamedItems: table, packs, cpr, loadTitleIndex, calls, requested, docs};
 }
 
 test('builds on each client, deduplicates pack reads and respects visibility, names and aliases', async () => {
@@ -92,7 +93,7 @@ test('Foundry entry point waits for cprReady on a non-GM client and uses the con
   const env = client(), events = new Map(), self = {};
   const deps = {
     Hooks: {once: (event, callback) => events.set(event, callback)},
-    game: {user: {isGM: false}, modules: new Map([['cpr-zh-aliases', self], ['slow-insert', {active:true, version:'9.0.0'}]]), packs: env.packs},
+    game: {user: {isGM: false}, modules: new Map([['zh-aliases-core', {active:true,api:core}], ['cpr-zh-aliases', self], ['slow-insert', {active:true, version:'9.0.0'}]]), packs: env.packs},
     chrisPremades: env.cpr, CONFIG: {chrisPremades: {renamedItems: env.renamedItems}},
     location: {href:'http://localhost/table/game'},
     foundry: {utils: {getRoute: path => path === 'modules/slow-insert/scripts/grouping.mjs'
@@ -108,7 +109,7 @@ test('Foundry entry point waits for cprReady on a non-GM client and uses the con
     Object.defineProperty(globalThis, key, {value, configurable: true, writable: true});
     t.after(() => before ? Object.defineProperty(globalThis, key, before) : delete globalThis[key]);
   }
-  await import('../module/scripts/main.mjs');
+  await import('../modules/cpr-zh-aliases/scripts/main.mjs');
   events.get('init')();
   assert.equal(self.api.report.status, 'waiting-for-cpr'); assert.deepEqual(env.requested, []);
   await events.get('cprReady')();
@@ -130,14 +131,14 @@ test('a conflicting CPR flag on a non-CPR member blocks all its siblings without
 });
 
 test('Slow Insert is required without a version constraint', async () => {
-  const manifest = JSON.parse(await readFile(new URL('../module/module.json', import.meta.url)));
+  const manifest = JSON.parse(await readFile(new URL('../modules/zh-aliases-core/module.json', import.meta.url)));
   assert.deepEqual(manifest.relationships.requires.filter(r => r.id === 'slow-insert'),
     [{id:'slow-insert', type:'module'}]);
 });
 
 test('missing, inactive or incompatible Slow Insert never falls back to individual aliases', async t => {
   const modules = new Map();
-  const {loadGrouping} = await import('../module/scripts/groups.mjs');
+  const {loadGrouping} = await import('../modules/zh-aliases-core/scripts/groups.mjs');
   for (const [key,value] of Object.entries({game:{modules}, location:{href:'http://localhost/game'},
     foundry:{utils:{getRoute:()=>'data:text/javascript,export const unrelated = true'}}})) {
     const before = Object.getOwnPropertyDescriptor(globalThis,key);

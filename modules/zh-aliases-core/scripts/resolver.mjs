@@ -1,3 +1,5 @@
+import {inScope} from './scope.mjs';
+
 const han = /\p{Script=Han}/u;
 const english = name => typeof name === 'string' && /[A-Za-z]/.test(name) && !han.test(name);
 const fold = name => name.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase();
@@ -29,17 +31,29 @@ function describe(candidates) {
     .sort((a, b) => String(a.englishName).localeCompare(String(b.englishName)));
 }
 
-export function registerAliases(pairs, nativeNames, renamedItems, groups = new Map()) {
+export function planAliases({pairs, lookupNames, existingAliases = {}, groups = new Map(), scope = null}) {
+  const aliases = new Map();
+  pairs = pairs.filter(pair => inScope(pair, scope));
+  groups = new Map([...groups].map(([key, members]) => [key, members.filter(member => inScope(member, scope))])
+    .filter(([, members]) => members.length));
   const spellings = new Map();
-  for (const name of [...nativeNames, ...Object.keys(renamedItems)]) {
+  for (const name of [...lookupNames, ...Object.keys(existingAliases)]) {
     if (english(name)) record(spellings, fold(name), name);
   }
-  // Resolve against the original CPR table, before publishing any aliases.
-  function infer(candidates, name, source) {
+  // Resolve against the provider snapshot, before publishing any aliases.
+  function* lookupTargets(name) {
     if (!english(name)) return;
     for (const spelling of spellings.get(fold(name)) ?? [name]) {
-      const target = Object.hasOwn(renamedItems, spelling) ? renamedItems[spelling] : spelling;
-      record(candidates, typeof target === 'string' ? target : null, source);
+      const target = Object.hasOwn(existingAliases, spelling) ? existingAliases[spelling] : spelling;
+      yield typeof target === 'string' ? target : null;
+    }
+  }
+  function recordOriginal(candidates, name, source) {
+    for (const target of lookupTargets(name)) record(candidates, target, source);
+  }
+  function recordEmbedded(candidates, name, source) {
+    for (const target of lookupTargets(name)) {
+      if (lookupNames.has(target)) record(candidates, target, source);
     }
   }
   const evidence = new Map();
@@ -50,12 +64,12 @@ export function registerAliases(pairs, nativeNames, renamedItems, groups = new M
   for (const {translatedName, englishName, source} of pairs) {
     const candidates = forName(translatedName);
     if (!englishName) { record(candidates, null, source); continue; }
-    infer(candidates, englishName, source);
+    recordOriginal(candidates, englishName, source);
     const parts = bilingualParts(translatedName);
-    if (!parts) infer(forName(translatedName + ' ' + englishName), englishName, source);
+    if (!parts) recordOriginal(forName(translatedName + ' ' + englishName), englishName, source);
     else {
-      infer(candidates, parts.english, source);
-      if (fold(parts.english) === fold(englishName)) infer(forName(parts.chinese), englishName, source);
+      recordEmbedded(candidates, parts.english, source);
+      if (fold(parts.english) === fold(englishName)) recordOriginal(forName(parts.chinese), englishName, source);
     }
   }
 
@@ -65,35 +79,35 @@ export function registerAliases(pairs, nativeNames, renamedItems, groups = new M
   for (const [group, members] of groups) {
     const candidates = new Map();
     const displays = new Set();
-    for (const {displayName, originalName, source, cprNames} of members) {
+    for (const {displayName, originalName, source, lookupNames: memberLookupNames} of members) {
       if (han.test(displayName)) displays.add(displayName);
       merge(candidates, evidence.get(displayName));
       const parts = bilingualParts(displayName);
       if (parts) {
         const embedded = new Map();
-        infer(embedded, parts.english, source);
+        recordEmbedded(embedded, parts.english, source);
         merge(candidates, embedded);
         const translated = evidence.get(parts.chinese);
         // A complete bilingual name may disambiguate a known translation,
         // but it must not contradict every known English original.
-        if (translated && [...translated.keys()].some(name => name !== null)
+        if (embedded.size && translated && [...translated.keys()].some(name => name !== null)
           && ![...embedded.keys()].some(name => name !== null && translated.has(name))) merge(candidates, translated);
-      } else infer(candidates, displayName, source);
-      infer(candidates, originalName, source);
-      for (const name of cprNames ?? []) infer(candidates, name, source);
-      if (Object.hasOwn(renamedItems, displayName)) {
-        const target = renamedItems[displayName];
-        record(candidates, typeof target === 'string' ? target : null, 'renamedItems#' + displayName);
+      } else recordOriginal(candidates, displayName, source);
+      recordOriginal(candidates, originalName, source);
+      for (const name of memberLookupNames ?? []) recordOriginal(candidates, name, source);
+      if (Object.hasOwn(existingAliases, displayName)) {
+        const target = existingAliases[displayName];
+        record(candidates, typeof target === 'string' ? target : null, 'existingAliases#' + displayName);
       }
     }
     plans.push({group, members, candidates, displays});
   }
-  // CPR has a single exact-name table for every type and edition. Groups that
-  // need the very same Chinese key must therefore agree before either can write.
+  // Every plan resolves one output scope. All groups sharing an exact key
+  // within that scope must agree before either can publish it.
   const byDisplay = new Map();
   for (const plan of plans) for (const name of plan.displays) record(byDisplay, name, plan);
   const visited = new Set(), blocked = new Set();
-  const report = {status: 'ready', registered: 0, existing: 0, unsupported: 0, conflicts: [], clusterErrors: []};
+  const report = {status: 'ready', planned: 0, existing: 0, unsupported: 0, conflicts: [], clusterErrors: []};
   for (const seed of plans) {
     if (visited.has(seed)) continue;
     const component = [seed], combined = new Map(), displays = new Set();
@@ -110,7 +124,10 @@ export function registerAliases(pairs, nativeNames, renamedItems, groups = new M
     }
     if (combined.size > 1 || combined.has(null)) {
       for (const name of displays) blocked.add(name);
-      report.clusterErrors.push({reason: 'inconsistent-lookup', groups: component.map(p => p.group).sort(),
+      const originals = [...combined.keys()].filter(name => name !== null);
+      const reason = originals.filter(name => lookupNames.has(name)).length > 1 ? 'multiple-lookup-targets'
+        : originals.length > 1 ? 'conflicting-originals' : 'unknown-original';
+      report.clusterErrors.push({reason, groups: component.map(p => p.group).sort(),
         members: component.flatMap(p => p.members).sort((a, b) => a.source.localeCompare(b.source)),
         candidates: describe(combined)});
       continue;
@@ -125,11 +142,11 @@ export function registerAliases(pairs, nativeNames, renamedItems, groups = new M
       continue;
     }
     if (blocked.has(displayName)) continue;
-    if (displayName in renamedItems || nativeNames.has(displayName)) { report.existing++; continue; }
+    if (displayName in existingAliases || lookupNames.has(displayName)) { report.existing++; continue; }
     const [lookupName] = candidates.keys();
-    if (!nativeNames.has(lookupName)) { report.unsupported++; continue; }
-    renamedItems[displayName] = lookupName;
-    report.registered++;
+    if (!lookupNames.has(lookupName)) { report.unsupported++; continue; }
+    aliases.set(displayName, lookupName);
+    report.planned++;
   }
-  return report;
+  return {aliases, report: {...report, scope}};
 }

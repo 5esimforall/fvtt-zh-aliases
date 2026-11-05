@@ -1,3 +1,4 @@
+import {core} from '../modules/zh-aliases-core/scripts/api.mjs';
 // Opt-in replay against a trusted local CPR installation. Execute only the lookup
 // functions, with small in-memory packs. Never start Foundry or open a world DB.
 import test from 'node:test';
@@ -5,8 +6,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import vm from 'node:vm';
-import { activate } from '../module/scripts/runtime.mjs';
-import { TRANSLATION_MODULE } from '../module/scripts/translations.mjs';
+import { activate } from '../modules/cpr-zh-aliases/scripts/runtime.mjs';
+import { TRANSLATION_MODULE } from '../modules/zh-aliases-core/scripts/translations.mjs';
 
 const modules = process.env.CPR_MODULES_DIR;
 test('installed CPR resolves the real translation spellings to the English control document', {
@@ -49,7 +50,7 @@ test('installed CPR resolves the real translation spellings to the English contr
   assert.equal(await ctx.getCPRAutomation(spell('迷踪步')), undefined);
   const displayed = ['剑刃防护', '剑刃防护 Blade Ward', '剑刃防护 blade ward'].map(spell);
   assert.equal(await ctx.getCPRAutomation(displayed[2]), undefined);
-  const report = await activate({renamedItems, packs, loadGrouping:()=>items=>new Map(items.map(i=>[i.uuid,{key:null}])), localItems:displayed.map((item,i)=>({...item,uuid:'Item.'+i})), cpr: {macros, legacyMacros: macros,
+  const report = await activate({core, renamedItems, packs, loadGrouping:()=>items=>new Map(items.map(i=>[i.uuid,{key:null}])), localItems:displayed.map((item,i)=>({...item,uuid:'Item.'+i})), cpr: {macros, legacyMacros: macros,
     utils: {constants, genericUtils: {getCPRSetting: () => false}}},
     loadTitleIndex: async () => JSON.parse(await readFile(join(modules, TRANSLATION_MODULE, 'translation/cn/titles.json'), 'utf8'))});
   assert.equal(report.status, 'ready', JSON.stringify(report));
@@ -79,7 +80,7 @@ test('installed Slow Insert validates the five Blade Ward members, separated by 
   const dir = process.env.SLOW_INSERT_MODULE_DIR;
   const {pathToFileURL} = await import('node:url');
   const {GROUPING_REGISTRY} = await import(pathToFileURL(join(dir,'data/grouping-registry.mjs')));
-  const {itemGroups, loadGrouping} = await import('../module/scripts/groups.mjs');
+  const {itemGroups, loadGrouping} = await import('../modules/zh-aliases-core/scripts/groups.mjs');
   const modules = new Map([['slow-insert',{active:true}]]), packs = new Map(), indexes = new Map();
   for (const [uuid, record] of Object.entries(GROUPING_REGISTRY.members)) {
     if (record.identifier !== 'blade-ward') continue;
@@ -100,14 +101,14 @@ test('installed Slow Insert validates the five Blade Ward members, separated by 
     t.after(()=>before ? Object.defineProperty(globalThis,key,before) : delete globalThis[key]);
   }
   const catalog = await loadGrouping();
-  const groups = itemGroups(indexes,catalog,[],{});
+  const groups = itemGroups(indexes,catalog,[]);
   assert.equal(groups.get('spell:2014:blade-ward').length,2);
   assert.equal(groups.get('spell:2024:blade-ward').length,3);
-  const {registerAliases} = await import('../module/scripts/aliases.mjs');
+  const {applyPlan} = await import('./helpers/apply-plan.mjs');
   const table = {};
-  assert.equal(registerAliases([],new Set(['Blade Ward']),table,groups).status,'ready');
+  assert.equal(applyPlan([],new Set(['Blade Ward']),table,groups).status,'ready');
   assert.equal(table['剑刃防护 blade ward'],'Blade Ward');
   assert.equal(table.剑刃防护,'Blade Ward');
   modules.get('dnd5e_classpack').version = 'unverified-version';
-  assert.equal(itemGroups(indexes,catalog,[],{}).get('spell:2014:blade-ward').length,1);
+  assert.equal(itemGroups(indexes,catalog,[]).get('spell:2014:blade-ward').length,1);
 });

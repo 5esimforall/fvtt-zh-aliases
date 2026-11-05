@@ -1,0 +1,32 @@
+{
+  "id": "zh-aliases-core",
+  "title": "中文别名基座 · Chinese Alias Core",
+  "description": "共享译名证据、分组读取和名称消歧。 Shared translation evidence and name resolution.",
+  "version": "0.3.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "esmodules": [
+    "scripts/main.mjs"
+  ],
+  "relationships": {
+    "systems": [
+      {
+        "id": "dnd5e",
+        "type": "system"
+      }
+    ],
+    "requires": [
+      {
+        "id": "slow-insert",
+        "type": "module"
+      },
+      {
+        "id": "dnd-simplified-chinese-babele-patch",
+        "type": "module"
+      }
+    ]
+  }
+}

@@ -1,19 +1,28 @@
-import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import {readModules, root} from './workspace.mjs';
 
-const moduleDir = new URL('../module/', import.meta.url);
-const {id, version} = JSON.parse(await readFile(new URL('module.json', moduleDir), 'utf8'));
-const archive = new URL('../dist/' + id + '-v' + version + '.zip', import.meta.url);
-const stage = await mkdtemp(join(tmpdir(), id + '-'));
-try {
-  await cp(moduleDir, join(stage, id), {recursive: true});
-  execFileSync('zip', ['-qr', 'module.zip', id, '-x', '*/.DS_Store'], {cwd: stage});
-  await mkdir(new URL('./', archive), {recursive: true});
-  await cp(join(stage, 'module.zip'), archive);
-} finally {
-  await rm(stage, {recursive: true, force: true});
+export async function packageModules(destination = join(root, 'dist')) {
+  const archives = [];
+  await mkdir(destination, {recursive: true});
+  for (const {directory, manifest: {id, version}} of await readModules()) {
+    const archive = join(destination, id + '-v' + version + '.zip');
+    const stage = await mkdtemp(join(tmpdir(), id + '-'));
+    try {
+      await cp(directory, join(stage, id), {recursive: true});
+      execFileSync('zip', ['-qr', 'module.zip', id, '-x', '*/.DS_Store'], {cwd: stage});
+      await cp(join(stage, 'module.zip'), archive);
+    } finally {
+      await rm(stage, {recursive: true, force: true});
+    }
+    archives.push(archive);
+  }
+  return archives;
 }
-console.log(fileURLToPath(archive));
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  for (const archive of await packageModules()) console.log(archive);
+}
