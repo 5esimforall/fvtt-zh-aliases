@@ -1,5 +1,17 @@
 import {installLookupFallback} from './medkit-lookup.mjs';
 
+export function baselineScopes(itemTypes) {
+  const scopes = [];
+  for (const rules of ['2014', '2024']) {
+    scopes.push(
+      {rules, type: 'spell', types: ['spell']},
+      {rules, type: 'feat', types: ['feat'], excludeCategories: ['monster'], actorType: 'character'},
+      {rules, type: 'item', types: [...itemTypes], actorType: 'character'}
+    );
+  }
+  return scopes;
+}
+
 export async function activateProvider({provider, core, cpr, loadCorpus, isActive = () => true}) {
   const api = {report: {provider: provider.id, status: 'loading'}};
   if (core?.apiVersion !== 1 || typeof core.createRefreshQueue !== 'function') {
@@ -14,30 +26,37 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
     return api;
   }
   let state, stop;
-  function plan(mode, scope) {
-    const key = JSON.stringify([mode, scope.rules, scope.type]);
-    if (!state.plans.has(key)) {
-      const names = provider.catalogNames(state.corpus, mode, scope);
-      const pairs = core.collectNamePairs(state.corpus.sources, state.corpus.titleIndex, names);
-      const result = core.planAliases({pairs, lookupNames: names, groups: state.groups, scope});
-      state.plans.set(key, result);
-      api.report.scopes.push({...result.report, mode});
-      if (result.report.status === 'cluster-conflict') api.report.status = 'cluster-conflict';
+  function planFor(targetState, targetReport, mode, scope) {
+    const key = JSON.stringify([mode, scope.rules, scope.type, scope.category ?? null, scope.excludeCategories ?? null, scope.actorType ?? null]);
+    if (!targetState.plans.has(key)) {
+      const names = provider.catalogNames(targetState.corpus, mode, scope);
+      const pairs = core.collectNamePairs(targetState.corpus.sources, targetState.corpus.titleIndex, names);
+      const result = core.planAliases({pairs, lookupNames: names, groups: targetState.groups, scope});
+      targetState.plans.set(key, result);
+      targetReport.scopes.push({...result.report, mode});
+      if (result.report.status === 'cluster-conflict') targetReport.status = 'cluster-conflict';
     }
-    return state.plans.get(key);
+    return targetState.plans.get(key);
   }
   function resolve(item, options) {
-    if (state?.corpus.isCurrent?.() === false) state = null;
+    const valid = state?.corpus.isAccessCurrent ? state.corpus.isAccessCurrent() : state?.corpus.isCurrent?.() !== false;
+    if (state && !valid) state = null;
     if (!state || !/\p{Script=Han}/u.test(item.name)) return null;
     const enabledSources = utils.genericUtils.getCPRSetting('additionalCompendiums');
     if (!Object.hasOwn(enabledSources ?? {}, provider.source)) return null;
     const scope = lookupScope(item, options, core, utils.constants.itemTypes);
     if (!scope) return null;
     const mode = utils.genericUtils.getCPRSetting(provider.modeSetting);
-    return plan(mode, scope).aliases.get(item.name) ?? null;
+    const planned = planFor(state, api.report, mode, scope);
+    return (typeof core.resolveItemAlias === 'function' ? core.resolveItemAlias(planned, item) : planned.aliases.get(item.name)) ?? null;
   }
   const queue = core.createRefreshQueue({
-    invalidate: () => { state = null; api.report = {provider: provider.id, status: 'loading'}; },
+    invalidate: options => {
+      if (options?.retract) {
+        state = null;
+        api.report = {provider: provider.id, status: 'loading'};
+      }
+    },
     build: async isCurrent => {
       try {
         const corpus = await loadCorpus();
@@ -49,14 +68,13 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
           throw Object.assign(new Error('Grouping unavailable', {cause: error}), {source: 'truesight'});
         }
         if (!isCurrent() || corpus.isCurrent?.() === false) return;
-        state = {corpus, groups, plans: new Map()};
-        api.report = {provider: provider.id, status: 'ready', grouping: 'truesight', scopes: []};
+        const nextState = {corpus, groups, plans: new Map()};
+        const nextReport = {provider: provider.id, status: 'ready', grouping: 'truesight', scopes: []};
         // Validate every dictionary before enabling any fallback. Plans remain
         // scoped; the two editions never share a global display-name map.
         const mode = utils.genericUtils.getCPRSetting(provider.modeSetting);
-        for (const rules of ['2014', '2024']) for (const type of ['spell', 'feat', 'item']) {
-          plan(mode, {rules, type, types: type === 'item' ? [...utils.constants.itemTypes] : [type]});
-        }
+        for (const scope of baselineScopes(utils.constants.itemTypes)) planFor(nextState, nextReport, mode, scope);
+        if (!isCurrent() || corpus.isCurrent?.() === false) return;
         if (!stop) stop = installLookupFallback({compendiumUtils: utils.compendiumUtils, source: provider.source, resolve, isActive,
           getSourceOrder: () => Object.keys(utils.genericUtils.getCPRSetting('additionalCompendiums') ?? {}),
           getAppliedSource: typeof utils.itemUtils?.getSource === 'function' ? item => utils.itemUtils.getSource(item) : undefined,
@@ -64,7 +82,10 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
         if (!stop) {
           state = null;
           api.report = {provider: provider.id, status: 'unsupported-' + provider.id + '-entry'};
+          return;
         }
+        state = nextState;
+        api.report = nextReport;
       } catch (error) {
         if (isCurrent()) {
           state = null;
@@ -73,7 +94,7 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
       }
     }
   });
-  api.refresh = async () => { await queue.request(); return api.report; };
+  api.refresh = async options => { await queue.request(options); return api.report; };
   api.stop = () => {
     queue.stop();
     state = null;
@@ -85,7 +106,7 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
   return api;
 }
 
-function lookupScope(item, options, core, itemTypes) {
+export function lookupScope(item, options, core, itemTypes) {
   const rules = core.rulesEdition(options.rules ?? 'legacy');
   if (!rules) return null;
   // Match Medkit's actor classification; monster identity translation is not
@@ -96,5 +117,18 @@ function lookupScope(item, options, core, itemTypes) {
   if (actorType === 'npc' && item.type !== 'spell') return null;
   const type = item.type === 'spell' || item.type === 'feat' ? item.type
     : itemTypes.includes(item.type) ? 'item' : null;
-  return type ? {rules, type, types: type === 'item' ? [...itemTypes] : [type]} : null;
+  if (!type) return null;
+  const rawCategory = type === 'feat' && typeof item.system?.type?.value === 'string'
+    ? item.system.type.value.trim() : '';
+  const category = rawCategory || undefined;
+  const excludeCategories = type === 'feat' && actorType === 'character' && category !== 'monster'
+    ? ['monster'] : undefined;
+  const scopeActorType = type === 'spell' ? undefined : actorType;
+  return {
+    rules, type,
+    types: type === 'item' ? [...itemTypes] : [type],
+    ...(category ? {category} : {}),
+    ...(excludeCategories ? {excludeCategories} : {}),
+    ...(scopeActorType ? {actorType: scopeActorType} : {})
+  };
 }

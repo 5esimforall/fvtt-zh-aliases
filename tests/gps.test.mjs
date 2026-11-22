@@ -308,12 +308,61 @@ test('both adapters share evidence but keep provider output and disabling indepe
 
 
 test('GPS refresh bursts share one in-flight task and only publish the latest scoped plans', async () => {
-  const env=client();let calls=0,plans=0,release;
-  const loadCorpus=async()=>{calls++;if(calls===2)await new Promise(resolve=>{release=resolve;});return env.loadCorpus();};
+  const env=client();let calls=0,plans=0,release,gate=false;
+  const loadCorpus=async()=>{calls++;if(calls===2||gate){gate=false;await new Promise(resolve=>{release=resolve;});}return env.loadCorpus();};
   const api=await activate({...env,loadCorpus,core:{...core,planAliases:args=>{plans++;return core.planAliases(args);}}});
   const initialPlans=plans;
   const burst=Array.from({length:40},()=>api.refresh());
+  assert.equal((await env.compendiumUtils.getAllAutomations(feat('不屈')))[0].document, env.docs[0], 'non-retracting refresh keeps lookups live');
   while(!release)await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,2);
   for(let i=0;i<40;i++)burst.push(api.refresh());release();await Promise.all(burst);
-  assert.equal(calls,3);assert.equal(plans,initialPlans*2);assert.equal(api.report.status,'ready');api.stop();
+  assert.equal(calls,3);assert.equal(plans,initialPlans*2);assert.equal(api.report.status,'ready');
+  // Retracting refresh withdraws immediately until the rebuild settles
+  release=null;gate=true;
+  const retracting=api.refresh({retract:true});
+  assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('不屈')), []);
+  while(!release)await new Promise(resolve=>setTimeout(resolve,0));
+  release();await retracting;
+  assert.equal((await env.compendiumUtils.getAllAutomations(feat('不屈')))[0].document, env.docs[0]);
+  api.stop();
+});
+
+test('GPS resolves Indomitable despite monster and racial collisions and disambiguates same-scope conflicts', async () => {
+  const env = client();
+  env.packs.set('blade-bone-and-benefit.racial-traits', {visible: true, documentName: 'Item', getIndex: async () => [
+    {_id: 'unf', name: '不屈', type: 'feat', flags: {babele: {originalName: 'Unflinching'}}, system: {identifier: 'unflinching', type: {value: 'race'}, source: {rules: '2024'}}}
+  ]});
+  env.packs.set('mcdm-flee-mortals.features', {visible: true, documentName: 'Item', getIndex: async () => [
+    {_id: 'rel', name: '不屈', type: 'feat', flags: {babele: {originalName: 'Relentless'}}, system: {identifier: 'relentless', type: {value: 'monster'}, source: {rules: '2014'}}}
+  ]});
+  env.packs.set('dnd5e.classes24', {visible: true, documentName: 'Item', getIndex: async () => [
+    {_id: 'ind24', name: '不屈', type: 'feat', flags: {babele: {originalName: 'Indomitable'}}, system: {identifier: 'indomitable', type: {value: 'class'}, source: {rules: '2024'}}}
+  ]});
+  env.titleIndex['blade-bone-and-benefit.racial-traits'] = {titles: {Unflinching: '不屈'}};
+  env.titleIndex['mcdm-flee-mortals.features'] = {titles: {Relentless: '不屈'}};
+  env.titleIndex['dnd5e.classes24'] = {titles: {Indomitable: '不屈'}};
+  const api = await activate(env);
+  const classFeat = {name: '不屈', type: 'feat', actor: {type: 'character'}, system: {type: {value: 'class'}}};
+  assert.equal((await env.compendiumUtils.getAllAutomations(classFeat, {rules: 'modern'}))[0].document, env.docs[1]);
+
+  // Same-category conflict: item-level originalName, identifier, and compendiumSource disambiguate cleanly
+  env.titleIndex['dnd5e.classes24'].titles['Other Class Feature'] = '不屈';
+  await api.refresh();
+  assert.equal((await env.compendiumUtils.getAllAutomations({
+    name: '不屈', type: 'feat', actor: {type: 'character'},
+    flags: {babele: {originalName: 'Indomitable'}}, system: {type: {value: 'class'}}
+  }, {rules: 'modern'}))[0].document, env.docs[1]);
+  assert.equal((await env.compendiumUtils.getAllAutomations({
+    name: '不屈', type: 'feat', actor: {type: 'character'},
+    system: {type: {value: 'class'}, identifier: 'indomitable'}
+  }, {rules: 'modern'}))[0].document, env.docs[1]);
+  assert.equal((await env.compendiumUtils.getAllAutomations({
+    name: '不屈', type: 'feat', actor: {type: 'character'},
+    _stats: {compendiumSource: 'Compendium.dnd5e.classes24.Item.ind24'}, system: {type: {value: 'class'}}
+  }, {rules: 'modern'}))[0].document, env.docs[1]);
+  assert.deepEqual(await env.compendiumUtils.getAllAutomations({
+    name: '不屈', type: 'feat', actor: {type: 'character'},
+    flags: {babele: {originalName: 'Relentless'}}, system: {type: {value: 'class'}, identifier: 'indomitable'}
+  }, {rules: 'modern'}), []);
+  api.stop();
 });

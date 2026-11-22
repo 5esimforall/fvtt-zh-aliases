@@ -160,14 +160,185 @@ test('CPR refresh withdraws only owned aliases and rejects late asynchronous pub
   await pending; assert.equal(slow.report.status,'stopped');
 });
 
-test('CPR coalesces refresh bursts and supersedes an in-flight build without publishing its plan', async () => {
+test('CPR coalesces refresh bursts and keeps owned aliases live during non-retracting rebuilds', async () => {
   const {createController} = await import('../modules/cpr-zh-aliases/scripts/runtime.mjs');
   const env=client();let calls=0,plans=0,release;
   const loadCorpus=async()=>{calls++;if(calls===2)await new Promise(resolve=>{release=resolve;});return core.readCorpus(env);};
   const api=createController({...env,loadCorpus,core:{...core,planAliases:args=>{plans++;return core.planAliases(args);}}});
   await api.refresh();assert.equal(env.renamedItems.迷踪步,'Misty Step');
-  const burst=Array.from({length:40},()=>api.refresh());assert.equal(env.renamedItems.迷踪步,undefined);
+  env.renamedItems.外部保留='Custom Target';
+  const burst=Array.from({length:40},()=>api.refresh());
+  assert.equal(env.renamedItems.迷踪步,'Misty Step');
+  assert.equal(api.report.status,'ready');
   while(!release)await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,2);
   for(let i=0;i<40;i++)burst.push(api.refresh());release();await Promise.all(burst);
-  assert.equal(calls,3);assert.equal(plans,2);assert.equal(env.renamedItems.迷踪步,'Misty Step');api.stop();
+  assert.equal(calls,3);assert.equal(plans,2);
+  assert.equal(env.renamedItems.迷踪步,'Misty Step');
+  assert.equal(env.renamedItems.外部保留,'Custom Target');
+  // Obsolete owned alias is pruned on atomic swap while external entries survive
+  const titles = await env.loadTitleIndex();
+  titles['dnd5e.spells'].titles['Legacy Action'] = '替代动作';
+  delete titles['dnd5e.spells'].titles['Legacy Action'];
+  env.loadTitleIndex = async () => titles;
+  await api.refresh();
+  assert.equal(env.renamedItems.替代动作, undefined);
+  assert.equal(env.renamedItems.迷踪步, 'Misty Step');
+  assert.equal(env.renamedItems.外部保留, 'Custom Target');
+  // Retracting refresh clears owned entries synchronously
+  let retractRelease, hold = false;
+  const retractEnv = client();
+  const slowRetract = createController({...retractEnv, loadTitleIndex: () => hold
+    ? new Promise(r => { retractRelease = r; }) : retractEnv.loadTitleIndex()});
+  await slowRetract.refresh();
+  assert.equal(retractEnv.renamedItems.迷踪步, 'Misty Step');
+  hold = true;
+  const pending = slowRetract.refresh({retract: true});
+  assert.equal(slowRetract.report.status, 'loading');
+  assert.equal(retractEnv.renamedItems.迷踪步, undefined);
+  while(!retractRelease) await new Promise(r => setTimeout(r, 0));
+  retractRelease(await retractEnv.loadTitleIndex()); await pending;
+  assert.equal(slowRetract.report.status, 'ready');
+  assert.equal(retractEnv.renamedItems.迷踪步, 'Misty Step');
+  // Failed refresh fails closed
+  const brokenEnv = client();
+  brokenEnv.renamedItems.外部保留 = 'Custom Target';
+  const broken = createController(brokenEnv);
+  await broken.refresh(); assert.equal(brokenEnv.renamedItems.灵巧动作, 'Cunning Action');
+  const prevLoad = brokenEnv.loadTitleIndex;
+  brokenEnv.loadTitleIndex = async () => { const t = await prevLoad(); delete t['dnd5e.spells']; return t; };
+  await broken.refresh();
+  assert.equal(broken.report.status, 'source-error');
+  assert.equal(brokenEnv.renamedItems.灵巧动作, undefined);
+  assert.equal(brokenEnv.renamedItems.外部保留, 'Custom Target');
+  api.stop(); slowRetract.stop(); broken.stop();
+});
+
+test('CPR controller resolves scoped class features and titlebar lookups despite monster, NPC, and edition collisions', async () => {
+  const {createController} = await import('../modules/cpr-zh-aliases/scripts/runtime.mjs');
+  const renamedItems = {};
+  const docs = {
+    rage14: {uuid: 'cpr.14.rage', name: 'Rage', type: 'feat'},
+    rage24: {uuid: 'cpr.24.rage', name: 'Rage', type: 'feat'},
+    sneak24: {uuid: 'cpr.24.sneak', name: 'Sneak Attack', type: 'feat'},
+    deflect24: {uuid: 'cpr.24.deflect', name: 'Deflect Attacks', type: 'feat'},
+    deflectSummon14: {uuid: 'cpr.14.deflectSummon', name: 'Deflect Attack', type: 'feat'},
+    actionSurge24: {uuid: 'cpr.24.actionSurge', name: 'Action Surge', type: 'feat'},
+    lay14: {uuid: 'cpr.14.lay', name: 'Lay on Hands', type: 'feat'},
+    lay24: {uuid: 'cpr.24.lay', name: 'Lay On Hands', type: 'feat'}
+  };
+  const packs = new Map([
+    ['cpr.class14', {visible: true, documentName: 'Item', getIndex: async () => [docs.rage14, docs.lay14]}],
+    ['cpr.class24', {visible: true, documentName: 'Item', getIndex: async () => [docs.rage24, docs.sneak24, docs.deflect24, docs.actionSurge24, docs.lay24]}],
+    ['cpr.summon14', {visible: true, documentName: 'Item', getIndex: async () => [docs.deflectSummon14]}],
+    ['dnd5e.classfeatures', {visible: true, documentName: 'Item', getIndex: async () => [
+      {_id: 'r14', name: '狂暴', type: 'feat', flags: {babele: {originalName: 'Rage'}}, system: {identifier: 'rage', type: {value: 'class'}, source: {rules: '2014'}}},
+      {_id: 'l14', name: '圣疗', type: 'feat', flags: {babele: {originalName: 'Lay on Hands'}}, system: {identifier: 'lay-on-hands', type: {value: 'class'}, source: {rules: '2014'}}}
+    ]}],
+    ['dnd5e.classes24', {visible: true, documentName: 'Item', getIndex: async () => [
+      {_id: 'r24', name: '狂暴', type: 'feat', flags: {babele: {originalName: 'Rage'}}, system: {identifier: 'rage', type: {value: 'class'}, source: {rules: '2024'}}},
+      {_id: 's24', name: '偷袭', type: 'feat', flags: {babele: {originalName: 'Sneak Attack'}}, system: {identifier: 'sneak-attack', type: {value: 'class'}, source: {rules: '2024'}}},
+      {_id: 'd24', name: '拨挡攻击', type: 'feat', flags: {babele: {originalName: 'Deflect Attacks'}}, system: {identifier: 'deflect-attacks', type: {value: 'class'}, source: {rules: '2024'}}},
+      {_id: 'a24', name: '动作如潮', type: 'feat', flags: {babele: {originalName: 'Action Surge'}}, system: {identifier: 'action-surge', type: {value: 'class'}, source: {rules: '2024'}}},
+      {_id: 'l24', name: '圣疗', type: 'feat', flags: {babele: {originalName: 'Lay On Hands'}}, system: {identifier: 'lay-on-hands', type: {value: 'class'}, source: {rules: '2024'}}}
+    ]}],
+    ['dnd5e.monsterfeatures', {visible: true, documentName: 'Item', getIndex: async () => [
+      {_id: 'b14', name: '狂暴', type: 'feat', flags: {babele: {originalName: 'Berserk'}}, system: {identifier: 'berserk', type: {value: 'monster'}, source: {rules: '2014'}}},
+      {_id: 'da14', name: '拨挡攻击', type: 'feat', flags: {babele: {originalName: 'Deflect Attack'}}, system: {identifier: 'deflect-attack', type: {value: 'monster'}, source: {rules: '2014'}}}
+    ]}],
+    ['third.party', {visible: true, documentName: 'Item', getIndex: async () => [
+      {_id: 'otherSurge', name: '动作如潮', type: 'feat', flags: {babele: {originalName: 'Other Surge'}}, system: {identifier: 'other-surge', type: {value: 'class'}, source: {rules: '2024'}}}
+    ]}]
+  ]);
+  const titleIndex = Object.fromEntries([...BASE_ITEM_PACKS, 'chris-premades.CPRActions', 'chris-premades.CPRActions2024'].map(id => [id, {titles: {}}]));
+  titleIndex['dnd5e.classfeatures'].titles = {Rage: '狂暴', 'Lay on Hands': '圣疗'};
+  titleIndex['dnd5e.classes24'].titles = {Rage: '狂暴', 'Sneak Attack': '偷袭', 'Deflect Attacks': '拨挡攻击', 'Action Surge': '动作如潮', 'Lay On Hands': '圣疗'};
+  titleIndex['dnd5e.monsterfeatures'] = {titles: {Berserk: '狂暴', 'Deflect Attack': '拨挡攻击'}};
+  titleIndex['third.party'] = {titles: {'Other Surge': '动作如潮'}};
+  const localItems = [
+    {uuid: 'Actor.npc1.Item.sneak', name: '偷袭', type: 'feat', flags: {babele: {originalName: 'Sneak Attack (1/Round)'}}, system: {source: {rules: '2024'}}, actorType: 'npc'}
+  ];
+  const allByEdition = {
+    legacy: [docs.rage14, docs.lay14, docs.deflectSummon14],
+    modern: [docs.rage24, docs.sneak24, docs.deflect24, docs.actionSurge24, docs.lay24]
+  };
+  const nativeAll = async (item, opts = {}) => {
+    const targetName = renamedItems[item.name] ?? item.name;
+    const list = allByEdition[opts.rules ?? 'legacy'] ?? [];
+    const hit = list.find(d => d.name === targetName);
+    return hit ? [{document: hit, source: 'chris-premades', priority: 0}] : [];
+  };
+  const compendiumUtils = {
+    getAllAutomations: nativeAll,
+    getPreferredAutomation: async (item, opts) => (await nativeAll(item, opts))[0]?.document,
+    getAppliedOrPreferredAutomation: async (item, opts) => (await nativeAll(item, opts))[0]?.document
+  };
+  const settings = {thirdParty: false, additionalCompendiums: {'chris-premades': 0}};
+  const cpr = {
+    macros: {}, legacyMacros: {},
+    utils: {
+      constants: {
+        packs: {classFeatures: 'cpr.class14', monsterFeatures: 'cpr.summon14'},
+        modernPacks: {classFeatures: 'cpr.class24'},
+        itemTypes: ['weapon', 'equipment']
+      },
+      genericUtils: {getCPRSetting: key => settings[key]},
+      itemUtils: {getSource: () => undefined},
+      compendiumUtils
+    }
+  };
+  const api = createController({
+    core, cpr, renamedItems, packs,
+    loadCorpus: () => core.readCorpus({
+      packs, localItems, loadTitleIndex: async () => titleIndex,
+      loadGrouping: () => items => new Map(items.map(i => [i.uuid, {key: null}]))
+    })
+  });
+  await api.refresh();
+  assert.equal(Object.hasOwn(renamedItems, '狂暴'), false);
+  assert.equal(Object.hasOwn(renamedItems, '圣疗'), false);
+  assert.equal(Object.hasOwn(renamedItems, '动作如潮'), false);
+
+  const pc = {type: 'character'};
+  const rageFeat = {name: '狂暴', type: 'feat', actor: pc, system: {type: {value: 'class'}}};
+  assert.equal((await compendiumUtils.getAllAutomations(rageFeat, {rules: 'modern'}))[0].document, docs.rage24);
+  assert.equal(await compendiumUtils.getPreferredAutomation(rageFeat, {rules: 'legacy'}), docs.rage14);
+  assert.equal(await compendiumUtils.getAppliedOrPreferredAutomation(rageFeat, {rules: 'modern'}), docs.rage24);
+
+  // Monster / NPC Berserk is not misrouted to character Rage
+  assert.deepEqual(await compendiumUtils.getAllAutomations({
+    name: '狂暴', type: 'feat', actor: {type: 'npc'}, system: {type: {value: 'monster'}}
+  }, {rules: 'legacy'}), []);
+
+  // NPC local Sneak Attack (1/Round) does not break PC Sneak Attack
+  assert.equal(await compendiumUtils.getPreferredAutomation({
+    name: '偷袭', type: 'feat', actor: pc, system: {type: {value: 'class'}}
+  }, {rules: 'modern'}), docs.sneak24);
+
+  // Deflect Attacks 2024 vs Deflect Attack 2014 monster/summon
+  assert.equal(await compendiumUtils.getPreferredAutomation({
+    name: '拨挡攻击', type: 'feat', actor: pc, system: {type: {value: 'class'}}
+  }, {rules: 'modern'}), docs.deflect24);
+
+  // Lay on Hands (2014) vs Lay On Hands (2024) across editions
+  assert.equal(await compendiumUtils.getPreferredAutomation({
+    name: '圣疗', type: 'feat', actor: pc, system: {type: {value: 'class'}}
+  }, {rules: 'legacy'}), docs.lay14);
+  assert.equal(await compendiumUtils.getPreferredAutomation({
+    name: '圣疗', type: 'feat', actor: pc, system: {type: {value: 'class'}}
+  }, {rules: 'modern'}), docs.lay24);
+
+  // Same-scope conflict Action Surge vs Other Surge resolves via identifier / originalName / compendiumSource, fails closed without evidence
+  assert.equal(await compendiumUtils.getPreferredAutomation({
+    name: '动作如潮', type: 'feat', actor: pc, system: {type: {value: 'class'}, identifier: 'action-surge'}
+  }, {rules: 'modern'}), docs.actionSurge24);
+  assert.equal(await compendiumUtils.getPreferredAutomation({
+    name: '动作如潮', type: 'feat', actor: pc, system: {type: {value: 'class'}}, _stats: {compendiumSource: 'Compendium.dnd5e.classes24.Item.a24'}
+  }, {rules: 'modern'}), docs.actionSurge24);
+  assert.equal(await compendiumUtils.getPreferredAutomation({
+    name: '动作如潮', type: 'feat', actor: pc, system: {type: {value: 'class'}}
+  }, {rules: 'modern'}), undefined);
+
+  api.stop();
+  assert.equal(compendiumUtils.getAllAutomations, nativeAll);
+  assert.equal(await compendiumUtils.getPreferredAutomation(rageFeat, {rules: 'modern'}), undefined);
 });

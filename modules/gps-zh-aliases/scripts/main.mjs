@@ -7,12 +7,14 @@ Hooks.once('init', () => {
 Hooks.once('cprReady', async () => {
   const foundation = game.modules.get('truesight');
   const core = foundation?.active && foundation.api?.apiVersion === 1 ? foundation.api.names : null;
-  let api, changedDuringLoad = false;
+  let api, changedDuringLoad = false, retractDuringLoad = false;
   const hooks = Hooks;
   const hook = hooks.on('truesightChanged', change => {
     if (core?.affects && !core.affects(change, ['names', 'identity', 'access', 'review', 'sources'])) return;
     if (!game.modules.get(id)?.active) return;
-    if (api?.refresh) void api.refresh(); else changedDuringLoad = true;
+    const retract = Boolean(core?.affects?.(change, ['access'])) || !['ready', 'unreviewed'].includes(change?.status);
+    if (api?.refresh) void api.refresh({retract});
+    else { changedDuringLoad = true; retractDuringLoad ||= retract; }
   });
   api = await activate({core, cpr: globalThis.chrisPremades,
     loadCorpus: () => core.loadCorpus(),
@@ -22,7 +24,7 @@ Hooks.once('cprReady', async () => {
   if (api.refresh) {
     const stop = api.stop;
     api.stop = () => { hooks.off('truesightChanged', hook); stop(); };
-    if (changedDuringLoad) await api.refresh();
+    if (changedDuringLoad) await api.refresh({retract: retractDuringLoad});
   } else hooks.off('truesightChanged', hook);
   if (api.report.status === 'ready') console.info(id, {status: 'ready', scopes: api.report.scopes.length});
   else console.warn(id, api.report);

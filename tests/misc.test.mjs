@@ -321,12 +321,43 @@ test('MISC catalog follows its modes, factory exclusions, pack editions and UA f
 
 
 test('MISC refresh bursts share one in-flight task and only publish the latest scoped plans', async () => {
-  const env=client();let calls=0,plans=0,release;
-  const loadCorpus=async()=>{calls++;if(calls===2)await new Promise(resolve=>{release=resolve;});return env.loadCorpus();};
+  const env=client();let calls=0,plans=0,release,gate=false;
+  const loadCorpus=async()=>{calls++;if(calls===2||gate){gate=false;await new Promise(resolve=>{release=resolve;});}return env.loadCorpus();};
   const api=await activate({...env,loadCorpus,core:{...core,planAliases:args=>{plans++;return core.planAliases(args);}}});
   const initialPlans=plans;
   const burst=Array.from({length:40},()=>api.refresh());
+  assert.equal((await env.compendiumUtils.getAllAutomations(feat('拨挡飞弹')))[0].document, env.docs[0], 'non-retracting refresh keeps lookups live');
   while(!release)await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,2);
   for(let i=0;i<40;i++)burst.push(api.refresh());release();await Promise.all(burst);
-  assert.equal(calls,3);assert.equal(plans,initialPlans*2);assert.equal(api.report.status,'ready');api.stop();
+  assert.equal(calls,3);assert.equal(plans,initialPlans*2);assert.equal(api.report.status,'ready');
+  // Retracting refresh withdraws immediately until the rebuild settles
+  release=null;gate=true;
+  const retracting=api.refresh({retract:true});
+  assert.deepEqual(await env.compendiumUtils.getAllAutomations(feat('拨挡飞弹')), []);
+  while(!release)await new Promise(resolve=>setTimeout(resolve,0));
+  release();await retracting;
+  assert.equal((await env.compendiumUtils.getAllAutomations(feat('拨挡飞弹')))[0].document, env.docs[0]);
+  api.stop();
+});
+
+test('MISC resolves Deflect Attacks despite NPC embedded collisions and supports disambiguation', async () => {
+  const env = client();
+  const deflect24 = {_id: 'deflect24', name: 'Deflect Attacks', type: 'feat',
+    uuid: 'Compendium.midi-item-showcase-community.misc-class-features-2024.Item.deflect24', system: {source: {rules: '2024'}}};
+  env.docs.push(deflect24);
+  env.packs.set('midi-item-showcase-community.misc-class-features-2024', {
+    visible: true, documentName: 'Item', getIndex: async () => new Map([[deflect24._id, deflect24]])
+  });
+  env.packs.set('dnd5e.classes24', {visible: true, documentName: 'Item', getIndex: async () => [
+    {_id: 'da24', name: '拨挡攻击', type: 'feat', flags: {babele: {originalName: 'Deflect Attacks'}}, system: {identifier: 'deflect-attacks', type: {value: 'class'}, source: {rules: '2024'}}}
+  ]});
+  env.titleIndex['dnd5e.classes24'] = {titles: {'Deflect Attacks': '拨挡攻击'}};
+  env.localItems.push({
+    uuid: 'Actor.npc1.Item.deflect', name: '拨挡攻击', type: 'feat',
+    flags: {babele: {originalName: 'Deflect Attack'}}, system: {source: {rules: '2024'}}, actorType: 'npc'
+  });
+  const api = await activate(env);
+  const pcFeat = {name: '拨挡攻击', type: 'feat', actor: {type: 'character'}, system: {type: {value: 'class'}}};
+  assert.equal((await env.compendiumUtils.getAllAutomations(pcFeat, {rules: 'modern'}))[0].document, deflect24);
+  api.stop();
 });

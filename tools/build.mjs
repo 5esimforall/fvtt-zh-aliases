@@ -4,7 +4,7 @@ import {pathToFileURL} from 'node:url';
 import {root} from './workspace.mjs';
 
 export const sharedFiles = ['medkit-lookup.mjs', 'adapter-runtime.mjs'];
-export const sharedConsumers = ['gps-zh-aliases', 'misc-zh-aliases'];
+export const sharedConsumers = ['cpr-zh-aliases', 'gps-zh-aliases', 'misc-zh-aliases'];
 
 export async function syncShared({check = false, workspaceRoot = root} = {}) {
   for (const file of sharedFiles) {
