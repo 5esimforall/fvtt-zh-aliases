@@ -1,7 +1,5 @@
 import {installLookupFallback} from './shared/medkit-lookup.mjs';
-import {lookupScope} from './shared/adapter-runtime.mjs';
-
-const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
+import {lookupScope, yieldTurn} from './shared/adapter-runtime.mjs';
 
 const lookupPacks = [
   'spells', 'items', 'feats', 'classFeatures', 'actions', 'raceFeatures',
@@ -70,7 +68,7 @@ function readExternalAliases(renamedItems, owned) {
   return external;
 }
 
-async function computeGlobalPlan({core, cpr, renamedItems, existingAliases, packs, loadCorpus, isCurrent = () => true, ...corpusOptions}) {
+async function computeGlobalPlan({core, cpr, renamedItems, existingAliases, packs, loadCorpus, isCurrent = () => true, idle = false, ...corpusOptions}) {
   const provider = 'cpr';
   if (core?.apiVersion !== 1) return {report: {provider, status: 'unsupported-core'}};
   if (!renamedItems || ![null, Object.prototype].includes(Object.getPrototypeOf(renamedItems)) ||
@@ -87,13 +85,15 @@ async function computeGlobalPlan({core, cpr, renamedItems, existingAliases, pack
     const names = lookupNames(sources, corpus.indexes);
     if (!names.size) return {report: {provider, status: 'no-visible-candidates'}};
     const pairs = core.collectNamePairs(corpus.sources, corpus.titleIndex, names, extraTranslations);
+    await yieldTurn(idle);
+    if (!isCurrent() || corpus.isCurrent?.() === false) return {report: {provider, status: 'superseded'}};
     let groups;
     try {
       groups = core.itemGroups(corpus.indexes, corpus.catalogFor, corpus.localItems, row => macroNames(row, cpr));
     } catch (error) {
       return {report: {provider, ...core.sourceError(error, 'truesight')}};
     }
-    await nextTurn();
+    await yieldTurn(idle);
     if (!isCurrent() || corpus.isCurrent?.() === false) return {report: {provider, status: 'superseded'}};
     // CPR's single exact-key table requires agreement across types and editions.
     const {aliases, report} = core.planAliases({pairs, lookupNames: names, existingAliases: existingAliases ?? renamedItems, groups});
@@ -192,9 +192,11 @@ export function createController(options) {
         api.report = {provider: 'cpr', status: 'loading'};
       }
     },
-    build: async isCurrent => {
+    build: async (isCurrent, buildOptions) => {
       const externalAliases = readExternalAliases(options.renamedItems, owned);
-      const result = await computeGlobalPlan({...options, existingAliases: externalAliases, isCurrent});
+      const result = await computeGlobalPlan({
+        ...options, existingAliases: externalAliases, isCurrent, idle: Boolean(buildOptions?.idle)
+      });
       if (!isCurrent() || result.report.status === 'superseded') return;
       if (!result.aliases) {
         clear();

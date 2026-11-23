@@ -17,7 +17,7 @@ Hooks.once('cprReady', async () => {
     if (game.modules.get(id)?.active) {
       const retract = Boolean(core?.affects?.(change, ['access'])) || !['ready', 'unreviewed'].includes(change?.status);
       const immediate = retract || Boolean(core?.affects?.(change, ['review', 'sources']));
-      void refresh({retract, delay: immediate ? 0 : 400});
+      void refresh(immediate ? {retract, delay: 0} : {retract: false, delay: 400, idle: true});
     }
   });
   api.stop = () => { hooks.off('truesightChanged', hook); stop(); };

@@ -407,3 +407,370 @@ test('cpr main entry ignores identity-only changes, debounces name refreshes wit
   assert.equal(planCalls, 3);
   assert.equal(env.renamedItems.迷踪步, 'Misty Step');
 });
+
+test('cpr, gps, and misc main entries run debounced name refreshes during idle without blocking access retraction', async t => {
+  const {connectCatalog} = await import('../../truesight/module/scripts/catalog/api.mjs');
+  const origReq = globalThis.requestIdleCallback, origCancel = globalThis.cancelIdleCallback;
+  const idleQueue = [];
+  let nextIdleId = 0;
+  globalThis.requestIdleCallback = cb => {
+    const id = ++nextIdleId;
+    idleQueue.push({id, cb});
+    return id;
+  };
+  globalThis.cancelIdleCallback = id => {
+    const idx = idleQueue.findIndex(entry => entry.id === id);
+    if (idx >= 0) idleQueue.splice(idx, 1);
+  };
+  t.after(() => {
+    if (origReq === undefined) delete globalThis.requestIdleCallback;
+    else globalThis.requestIdleCallback = origReq;
+    if (origCancel === undefined) delete globalThis.cancelIdleCallback;
+    else globalThis.cancelIdleCallback = origCancel;
+  });
+
+  const renamedItems = {};
+  const docs = {
+    misty: {_id: 'misty', name: 'Misty Step', type: 'spell', uuid: 'fixture.cpr.misty'},
+    indomitable: {_id: 'ind', name: 'Indomitable', type: 'feat', uuid: 'Compendium.gambits-premades.gps-class-features.Item.ind', system: {source: {rules: '2014'}}},
+    deflect: {_id: 'def', name: 'Deflect Missiles', type: 'feat', uuid: 'Compendium.midi-item-showcase-community.misc-class-features.Item.def', system: {source: {rules: '2014'}}}
+  };
+  const packs = new Map([
+    ['fixture.cpr', {visible: true, documentName: 'Item', getIndex: async () => new Map([['misty', docs.misty]])}],
+    ['gambits-premades.gps-class-features', {visible: true, documentName: 'Item', getIndex: async () => new Map([['ind', docs.indomitable]])}],
+    ['midi-item-showcase-community.misc-class-features', {visible: true, documentName: 'Item', getIndex: async () => new Map([['def', docs.deflect]])}]
+  ]);
+  const titleIndex = Object.fromEntries([...BASE_ITEM_PACKS, 'chris-premades.CPRActions', 'chris-premades.CPRActions2024'].map(id => [id, {titles: {}}]));
+  titleIndex['dnd5e.spells'].titles = {'Misty Step': '迷踪步'};
+  titleIndex['dnd5e.classfeatures'].titles = {Indomitable: '不屈', 'Deflect Missiles': '拨挡飞弹'};
+  const settings = {
+    thirdParty: false, gambitPremades: 1, miscPremades: 1,
+    additionalCompendiums: {'chris-premades': 0, 'gambits-premades': 5, 'midi-item-showcase-community': 10}
+  };
+  const nativeAll = async (item, options = {}) => {
+    const name = renamedItems[item.name] ?? item.name;
+    const rules = core.rulesEdition(options.rules ?? 'legacy');
+    if (name === 'Misty Step') return [{source: 'chris-premades', document: docs.misty, priority: 0}];
+    if (name === 'Indomitable' && rules === '2014') return [{source: 'gambits-premades', document: docs.indomitable, priority: 5}];
+    if (name === 'Deflect Missiles' && rules === '2014') return [{source: 'midi-item-showcase-community', document: docs.deflect, priority: 10}];
+    return [];
+  };
+  const compendiumUtils = {
+    getAllAutomations: nativeAll,
+    getGPSAutomation: async () => {},
+    getMISCAutomation: async () => {},
+    getPreferredAutomation: async (item, opts) => (await nativeAll(item, opts))[0]?.document,
+    getAppliedOrPreferredAutomation: async (item, opts) => (await nativeAll(item, opts))[0]?.document
+  };
+  const cpr = {
+    macros: {}, legacyMacros: {},
+    utils: {
+      constants: {
+        packs: {spells: 'fixture.cpr'}, modernPacks: {spells: 'fixture.cpr'},
+        itemTypes: ['weapon', 'equipment']
+      },
+      genericUtils: {getCPRSetting: key => settings[key]},
+      itemUtils: {getSource: () => undefined},
+      compendiumUtils
+    }
+  };
+
+  const onceHandlers = new Map(), onHandlers = new Map();
+  let nextHookId = 0, corpusCalls = 0, planCalls = 0;
+  const revisions = {index: 0, sources: 0, names: 0, access: 0, review: 0, packs: 0};
+  connectCatalog({
+    getStatus: () => ({status: 'unreviewed', revisions}),
+    whenReady: async () => {},
+    read: ids => ({apiVersion: 1, status: 'unreviewed', entries: new Map(ids.map(uuid => [uuid, {key: null}]))})
+  });
+  const trackedCore = {
+    ...core,
+    loadCorpus: opts => { corpusCalls++; return core.loadCorpus(opts); },
+    planAliases: args => { planCalls++; return core.planAliases(args); }
+  };
+  const selfCpr = {active: true}, selfGps = {active: true}, selfMisc = {active: true};
+  const modules = new Map([
+    ['truesight', {active: true, api: {apiVersion: 1, names: trackedCore}}],
+    ['cpr-zh-aliases', selfCpr],
+    ['gps-zh-aliases', selfGps],
+    ['misc-zh-aliases', selfMisc],
+    ['chris-premades', {active: true}],
+    ['gambits-premades', {active: true}],
+    ['midi-item-showcase-community', {active: true}],
+    ['dnd-simplified-chinese-babele-patch', {active: true}]
+  ]);
+  const deps = {
+    Hooks: {
+      once: (event, cb) => { if (!onceHandlers.has(event)) onceHandlers.set(event, []); onceHandlers.get(event).push(cb); },
+      on: (event, cb) => { const id = ++nextHookId; onHandlers.set(id, {event, cb}); return id; },
+      off: (_event, id) => { onHandlers.delete(id); }
+    },
+    game: {
+      user: {id: 'gm', isGM: true}, world: {id: 'w'}, i18n: {lang: 'cn', localize: k => k},
+      items: new Map(), actors: new Map(), modules, packs
+    },
+    chrisPremades: cpr,
+    CONFIG: {chrisPremades: {renamedItems}},
+    location: {href: 'http://localhost/table/game'},
+    foundry: {utils: {getRoute: path => '/table/' + path}},
+    fetch: async () => ({ok: true, json: async () => titleIndex})
+  };
+  for (const [key, value] of Object.entries(deps)) {
+    const before = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, {value, configurable: true, writable: true});
+    t.after(() => before ? Object.defineProperty(globalThis, key, before) : delete globalThis[key]);
+  }
+  const bust = '?bust=' + Math.random();
+  await import('../modules/cpr-zh-aliases/scripts/main.mjs' + bust);
+  await import('../modules/gps-zh-aliases/scripts/main.mjs' + bust);
+  await import('../modules/misc-zh-aliases/scripts/main.mjs' + bust);
+  for (const cb of onceHandlers.get('init') ?? []) cb();
+  await Promise.all((onceHandlers.get('cprReady') ?? []).map(cb => cb()));
+  t.after(() => { selfCpr.api?.stop(); selfGps.api?.stop(); selfMisc.api?.stop(); });
+
+  const initialCorpusCalls = corpusCalls;
+  const initialPlanCalls = planCalls;
+  assert.equal(renamedItems.迷踪步, 'Misty Step');
+  assert.equal((await compendiumUtils.getAllAutomations({name: '不屈', type: 'feat'}, {rules: 'legacy'}))[0].document, docs.indomitable);
+  assert.equal((await compendiumUtils.getAllAutomations({name: '拨挡飞弹', type: 'feat'}, {rules: 'legacy'}))[0].document, docs.deflect);
+
+  const emit = payload => {
+    for (const entry of onHandlers.values()) if (entry.event === 'truesightChanged') entry.cb(payload);
+  };
+
+  // Names notification debounces and waits for requestIdleCallback while keeping live lookups
+  revisions.names++;
+  emit({status: 'ready', changes: ['names']});
+  await new Promise(r => setTimeout(r, 440));
+  assert.equal(corpusCalls, initialCorpusCalls);
+  assert.equal(idleQueue.length, 3);
+  assert.equal(renamedItems.迷踪步, 'Misty Step');
+  assert.equal((await compendiumUtils.getAllAutomations({name: '不屈', type: 'feat'}, {rules: 'legacy'}))[0].document, docs.indomitable);
+
+  for (let i = 0; i < 40 && idleQueue.length; i++) {
+    for (const entry of idleQueue.splice(0)) entry.cb();
+    await new Promise(r => setTimeout(r, 10));
+  }
+  assert.equal(idleQueue.length, 0);
+  assert.equal(corpusCalls, initialCorpusCalls + 3);
+  assert.ok(planCalls > initialPlanCalls);
+  assert.equal(renamedItems.迷踪步, 'Misty Step');
+
+  // Access notification retracts synchronously and rebuilds without waiting for idle
+  revisions.access++;
+  const beforeAccessCorpus = corpusCalls;
+  emit({status: 'ready', changes: ['access']});
+  assert.equal(renamedItems.迷踪步, undefined);
+  assert.deepEqual(await compendiumUtils.getAllAutomations({name: '不屈', type: 'feat'}, {rules: 'legacy'}), []);
+  assert.deepEqual(await compendiumUtils.getAllAutomations({name: '拨挡飞弹', type: 'feat'}, {rules: 'legacy'}), []);
+  await new Promise(r => setTimeout(r, 40));
+  assert.equal(idleQueue.length, 0);
+  assert.equal(corpusCalls, beforeAccessCorpus + 3);
+  assert.equal(renamedItems.迷踪步, 'Misty Step');
+  assert.equal((await compendiumUtils.getAllAutomations({name: '不屈', type: 'feat'}, {rules: 'legacy'}))[0].document, docs.indomitable);
+  assert.equal((await compendiumUtils.getAllAutomations({name: '拨挡飞弹', type: 'feat'}, {rules: 'legacy'}))[0].document, docs.deflect);
+});
+
+test('truesight + adapters end-to-end: creating/deleting monsters skips alias rebuilds while world items trigger debounced idle refresh', async t => {
+  const {createRuntime} = await import('../../truesight/module/scripts/runtime.mjs');
+  const {connectCatalog, catalog} = await import('../../truesight/module/scripts/catalog/api.mjs');
+  const {core: realCore} = await import('../../truesight/module/scripts/names/api.mjs');
+  const origReq = globalThis.requestIdleCallback, origCancel = globalThis.cancelIdleCallback;
+  const idleQueue = [];
+  let nextIdleId = 0;
+  globalThis.requestIdleCallback = cb => {
+    const id = ++nextIdleId;
+    idleQueue.push({id, cb});
+    return id;
+  };
+  globalThis.cancelIdleCallback = id => {
+    const idx = idleQueue.findIndex(entry => entry.id === id);
+    if (idx >= 0) idleQueue.splice(idx, 1);
+  };
+  t.after(() => {
+    if (origReq === undefined) delete globalThis.requestIdleCallback;
+    else globalThis.requestIdleCallback = origReq;
+    if (origCancel === undefined) delete globalThis.cancelIdleCallback;
+    else globalThis.cancelIdleCallback = origCancel;
+  });
+
+  const renamedItems = {};
+  const docs = {
+    rage24: {_id: 'rage24', name: 'Rage', type: 'feat', uuid: 'cpr.24.rage'},
+    fireball: {_id: 'fireball', name: 'Fireball', type: 'spell', uuid: 'cpr.14.fireball'},
+    bless: {_id: 'bless', name: 'Bless', type: 'spell', uuid: 'cpr.14.bless'},
+    indomitable: {_id: 'ind', name: 'Indomitable', type: 'feat', uuid: 'gps.14.ind', system: {source: {rules: '2014'}}},
+    deflect: {_id: 'def', name: 'Deflect Missiles', type: 'feat', uuid: 'misc.14.def', system: {source: {rules: '2014'}}}
+  };
+  const packs = new Map([
+    ['cpr.class24', {visible: true, documentName: 'Item', getIndex: async () => new Map([['rage24', docs.rage24]])}],
+    ['cpr.spells14', {visible: true, documentName: 'Item', getIndex: async () => new Map([['fireball', docs.fireball], ['bless', docs.bless]])}],
+    ['dnd5e.classes24', {visible: true, documentName: 'Item', getIndex: async () => new Map([
+      ['r24', {_id: 'r24', name: '狂暴', type: 'feat', flags: {babele: {originalName: 'Rage'}}, system: {identifier: 'rage', type: {value: 'class'}, source: {rules: '2024'}}}]
+    ])}],
+    ['dnd5e.spells', {visible: true, documentName: 'Item', getIndex: async () => new Map([
+      ['fb', {_id: 'fb', name: '火球术', type: 'spell', flags: {babele: {originalName: 'Fireball'}}, system: {identifier: 'fireball', source: {rules: '2014'}}}]
+    ])}],
+    ['gambits-premades.gps-class-features', {visible: true, documentName: 'Item', getIndex: async () => new Map([['ind', docs.indomitable]])}],
+    ['midi-item-showcase-community.misc-class-features', {visible: true, documentName: 'Item', getIndex: async () => new Map([['def', docs.deflect]])}]
+  ]);
+  const titleIndex = Object.fromEntries([...BASE_ITEM_PACKS, 'chris-premades.CPRActions', 'chris-premades.CPRActions2024'].map(id => [id, {titles: {}}]));
+  titleIndex['dnd5e.classes24'].titles = {Rage: '狂暴'};
+  titleIndex['dnd5e.spells'].titles = {Fireball: '火球术'};
+  titleIndex['dnd5e.classfeatures'].titles = {Indomitable: '不屈', 'Deflect Missiles': '拨挡飞弹'};
+  const settings = new Map([['quick-insert.gmOnly', false], ['quick-insert.embeddedIndexing', false]]);
+  const cprSettings = {
+    thirdParty: false, gambitPremades: 1, miscPremades: 1,
+    additionalCompendiums: {'chris-premades': 0, 'gambits-premades': 5, 'midi-item-showcase-community': 10}
+  };
+  const nativeAll = async (item, options = {}) => {
+    const name = renamedItems[item.name] ?? item.name;
+    const rules = realCore.rulesEdition(options.rules ?? 'legacy');
+    if (name === 'Rage' && rules === '2024') return [{source: 'chris-premades', document: docs.rage24, priority: 0}];
+    if (name === 'Fireball') return [{source: 'chris-premades', document: docs.fireball, priority: 0}];
+    if (name === 'Bless') return [{source: 'chris-premades', document: {uuid: 'cpr.14.bless', name: 'Bless'}, priority: 0}];
+    if (name === 'Indomitable' && rules === '2014') return [{source: 'gambits-premades', document: docs.indomitable, priority: 5}];
+    if (name === 'Deflect Missiles' && rules === '2014') return [{source: 'midi-item-showcase-community', document: docs.deflect, priority: 10}];
+    return [];
+  };
+  const compendiumUtils = {
+    getAllAutomations: nativeAll,
+    getGPSAutomation: async () => {},
+    getMISCAutomation: async () => {},
+    getPreferredAutomation: async (item, opts) => (await nativeAll(item, opts))[0]?.document,
+    getAppliedOrPreferredAutomation: async (item, opts) => (await nativeAll(item, opts))[0]?.document
+  };
+  const cpr = {
+    macros: {}, legacyMacros: {},
+    utils: {
+      constants: {
+        packs: {spells: 'cpr.spells14'}, modernPacks: {classFeatures: 'cpr.class24'},
+        itemTypes: ['weapon', 'equipment']
+      },
+      genericUtils: {getCPRSetting: key => cprSettings[key]},
+      itemUtils: {getSource: () => undefined},
+      compendiumUtils
+    }
+  };
+
+  const onceHandlers = new Map(), onHandlers = new Map();
+  let nextHookId = 0, corpusCalls = 0, planCalls = 0;
+  const hooks = {
+    once: (event, cb) => { if (!onceHandlers.has(event)) onceHandlers.set(event, []); onceHandlers.get(event).push(cb); },
+    on: (event, cb) => { const id = ++nextHookId; onHandlers.set(id, {event, cb}); return id; },
+    off: (_event, id) => { onHandlers.delete(id); },
+    callAll: (event, ...args) => { for (const entry of onHandlers.values()) if (entry.event === event) entry.cb(...args); }
+  };
+  const trackedCore = {
+    ...realCore,
+    loadCorpus: opts => { corpusCalls++; return realCore.loadCorpus(opts); },
+    planAliases: args => { planCalls++; return realCore.planAliases(args); }
+  };
+  const selfCpr = {active: true}, selfGps = {active: true}, selfMisc = {active: true};
+  const modules = new Map([
+    ['quick-insert', {active: true}],
+    ['truesight', {active: true, api: {apiVersion: 1, catalog, names: trackedCore}}],
+    ['cpr-zh-aliases', selfCpr],
+    ['gps-zh-aliases', selfGps],
+    ['misc-zh-aliases', selfMisc],
+    ['chris-premades', {active: true}],
+    ['gambits-premades', {active: true}],
+    ['midi-item-showcase-community', {active: true}],
+    ['dnd-simplified-chinese-babele-patch', {active: true}]
+  ]);
+  const qiRows = [
+    {item: {uuid: 'Compendium.dnd5e.classes24.Item.r24', package: 'dnd5e.classes24', name: '狂暴', documentType: 'Item', subType: 'feat', system: {identifier: 'rage', type: {value: 'class'}, source: {rules: '2024'}}}},
+    {item: {uuid: 'Compendium.dnd5e.spells.Item.fb', package: 'dnd5e.spells', name: '火球术', documentType: 'Item', subType: 'spell', system: {identifier: 'fireball', level: 3, school: 'evo', source: {rules: '2014'}}}}
+  ];
+  const game = {
+    ready: true, world: {id: 'world'}, user: {id: 'gm', isGM: true, can: () => true},
+    system: {id: 'dnd5e', documentTypes: {Item: {}, Actor: {}, Scene: {}, JournalEntry: {}, Macro: {}, RollTable: {}}},
+    i18n: {lang: 'cn', localize: k => k},
+    modules, packs, items: new Map(), actors: new Map(),
+    settings: {
+      register: (id, key, def) => { if (!settings.has(id + '.' + key)) settings.set(id + '.' + key, def.default); },
+      get: (id, key) => settings.get(id + '.' + key),
+      set: async (id, key, value) => settings.set(id + '.' + key, value)
+    }
+  };
+  const deps = {
+    Hooks: hooks, game, chrisPremades: cpr, CONFIG: {chrisPremades: {renamedItems}},
+    location: {href: 'http://localhost/table/game'},
+    foundry: {utils: {getRoute: path => '/table/' + path}},
+    fetch: async () => ({ok: true, json: async () => titleIndex})
+  };
+  for (const [key, value] of Object.entries(deps)) {
+    const before = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, {value, configurable: true, writable: true});
+    t.after(() => before ? Object.defineProperty(globalThis, key, before) : delete globalThis[key]);
+  }
+
+  const service = createRuntime({
+    game, hooks, config: {Item: {compendiumIndexFields: []}, Actor: {compendiumIndexFields: []}},
+    quickInsert: () => ({hasIndex: true, search: () => qiRows}), parser: () => null,
+    publisher: {status: () => ({canPublish: true}), start() {}, begin() {}, end() {}, destroy() {}}
+  });
+  connectCatalog(service);
+  await service.start();
+  t.after(() => service.destroy());
+
+  const bust = '?bust=' + Math.random();
+  await import('../modules/cpr-zh-aliases/scripts/main.mjs' + bust);
+  await import('../modules/gps-zh-aliases/scripts/main.mjs' + bust);
+  await import('../modules/misc-zh-aliases/scripts/main.mjs' + bust);
+  for (const cb of onceHandlers.get('init') ?? []) cb();
+  await Promise.all((onceHandlers.get('cprReady') ?? []).map(cb => cb()));
+  t.after(() => { selfCpr.api?.stop(); selfGps.api?.stop(); selfMisc.api?.stop(); });
+
+  const baseCorpusCalls = corpusCalls, basePlanCalls = planCalls;
+
+  // Creating & deleting an NPC monster with Chinese traits and spells must not trigger alias rebuilds
+  const monster = {
+    id: 'm1', uuid: 'Actor.m1', type: 'npc', name: '哥布林', testUserPermission: () => true,
+    items: new Map([
+      ['t1', {id: 't1', uuid: 'Actor.m1.Item.t1', name: '狂暴', type: 'feat'}],
+      ['s1', {id: 's1', uuid: 'Actor.m1.Item.s1', name: '火球术', type: 'spell'}]
+    ])
+  };
+  for (const item of monster.items.values()) item.parent = monster;
+  const monsterRow = {item: {uuid: 'Actor.m1', name: '哥布林', documentType: 'Actor', subType: 'npc', system: {source: {rules: '2014'}}}};
+  qiRows.push(monsterRow);
+  game.actors.set('m1', monster);
+  hooks.callAll('createActor', monster, {});
+  for (const item of monster.items.values()) hooks.callAll('createItem', item, {});
+  qiRows.pop();
+  game.actors.delete('m1');
+  hooks.callAll('deleteActor', monster, {});
+  await new Promise(r => setTimeout(r, 460));
+  assert.equal(idleQueue.length, 0);
+  assert.equal(corpusCalls, baseCorpusCalls);
+  assert.equal(planCalls, basePlanCalls);
+
+  // Existing Chinese lookups work normally
+  const pc = {type: 'character'};
+  assert.equal((await compendiumUtils.getAllAutomations({name: '狂暴', type: 'feat', actor: pc, system: {type: {value: 'class'}}}, {rules: 'modern'}))[0].document, docs.rage24);
+  assert.equal((await compendiumUtils.getAllAutomations({name: '火球术', type: 'spell'}, {rules: 'legacy'}))[0].document, docs.fireball);
+  assert.equal((await compendiumUtils.getAllAutomations({name: '不屈', type: 'feat', actor: pc}, {rules: 'legacy'}))[0].document, docs.indomitable);
+  assert.equal((await compendiumUtils.getAllAutomations({name: '拨挡飞弹', type: 'feat', actor: pc}, {rules: 'legacy'}))[0].document, docs.deflect);
+
+  // Creating a Chinese world Item triggers a debounced idle refresh
+  assert.equal(renamedItems.祝福术, undefined);
+  const blessItem = {
+    id: 'w1', uuid: 'Item.w1', name: '祝福术', type: 'spell', visible: true,
+    flags: {babele: {originalName: 'Bless'}}, system: {identifier: 'bless', source: {rules: '2014'}}
+  };
+  game.items.set('w1', blessItem);
+  qiRows.push({item: {...blessItem, documentType: 'Item', subType: 'spell'}});
+  hooks.callAll('createItem', blessItem, {});
+  await new Promise(r => setTimeout(r, 440));
+  assert.equal(corpusCalls, baseCorpusCalls);
+  assert.equal(idleQueue.length, 3);
+  for (let i = 0; i < 40 && idleQueue.length; i++) {
+    for (const entry of idleQueue.splice(0)) entry.cb();
+    await new Promise(r => setTimeout(r, 10));
+  }
+  assert.equal(idleQueue.length, 0);
+  assert.equal(corpusCalls, baseCorpusCalls + 3);
+  assert.ok(planCalls > basePlanCalls);
+  assert.equal(renamedItems.祝福术, 'Bless');
+});

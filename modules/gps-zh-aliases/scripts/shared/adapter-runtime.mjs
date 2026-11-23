@@ -1,7 +1,15 @@
 // Generated from shared/adapter-runtime.mjs. Edit the source, then run npm run build.
 import {installLookupFallback} from './medkit-lookup.mjs';
 
-const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
+export function yieldTurn(idle = false, idleTimeout = 1000) {
+  return new Promise(resolve => {
+    if (idle && typeof globalThis.requestIdleCallback === 'function') {
+      globalThis.requestIdleCallback(() => resolve(), {timeout: idleTimeout});
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
 
 export function baselineScopes(itemTypes) {
   const scopes = [];
@@ -55,10 +63,10 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
     }
     return cached.pairs;
   }
-  function planFor(targetState, targetReport, mode, scope) {
+  function planFor(targetState, targetReport, mode, scope, precomputedNames = null) {
     const key = JSON.stringify([mode, scope.rules, scope.type, scope.category ?? null, scope.excludeCategories ?? null, scope.actorType ?? null]);
     if (!targetState.plans.has(key)) {
-      const names = provider.catalogNames(targetState.corpus, mode, scope);
+      const names = precomputedNames ?? provider.catalogNames(targetState.corpus, mode, scope);
       const pairs = pairsForMode(targetState, mode, names);
       const result = core.planAliases({pairs, lookupNames: names, groups: targetState.groups, scope});
       targetState.plans.set(key, result);
@@ -86,8 +94,9 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
         api.report = {provider: provider.id, status: 'loading'};
       }
     },
-    build: async isCurrent => {
+    build: async (isCurrent, options) => {
       try {
+        const idle = Boolean(options?.idle);
         const corpus = await loadCorpus();
         if (!isCurrent() || corpus.isCurrent?.() === false) return;
         let groups;
@@ -96,7 +105,7 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
         } catch (error) {
           throw Object.assign(new Error('Grouping unavailable', {cause: error}), {source: 'truesight'});
         }
-        await nextTurn();
+        await yieldTurn(idle);
         if (!isCurrent() || corpus.isCurrent?.() === false) return;
         const nextState = {corpus, groups, plans: new Map(), pairsCache: new Map()};
         const nextReport = {provider: provider.id, status: 'ready', grouping: 'truesight', scopes: []};
@@ -104,10 +113,19 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
         // scoped; the two editions never share a global display-name map.
         const mode = utils.genericUtils.getCPRSetting(provider.modeSetting);
         const scopes = baselineScopes(utils.constants.itemTypes);
+        const scopeNamesList = scopes.map(scope => provider.catalogNames(nextState.corpus, mode, scope));
+        const allNames = new Set();
+        for (const names of scopeNamesList) for (const name of names) allNames.add(name);
+        nextState.pairsCache.set(mode, {
+          pairs: core.collectNamePairs(nextState.corpus.sources, nextState.corpus.titleIndex, allNames),
+          knownNames: allNames
+        });
+        await yieldTurn(idle);
+        if (!isCurrent() || corpus.isCurrent?.() === false) return;
         for (let i = 0; i < scopes.length; i++) {
-          planFor(nextState, nextReport, mode, scopes[i]);
+          planFor(nextState, nextReport, mode, scopes[i], scopeNamesList[i]);
           if (i + 1 < scopes.length) {
-            await nextTurn();
+            await yieldTurn(idle);
             if (!isCurrent() || corpus.isCurrent?.() === false) return;
           }
         }
