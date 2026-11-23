@@ -13,10 +13,11 @@ Hooks.once('cprReady', async () => {
   const refresh = api.refresh, stop = api.stop;
   const hooks = Hooks;
   const hook = hooks.on('truesightChanged', change => {
-    if (core?.affects && !core.affects(change, ['names', 'identity', 'access', 'review', 'sources'])) return;
+    if (core?.affects && !core.affects(change, ['names', 'access', 'review', 'sources'])) return;
     if (game.modules.get(id)?.active) {
       const retract = Boolean(core?.affects?.(change, ['access'])) || !['ready', 'unreviewed'].includes(change?.status);
-      void refresh({retract});
+      const immediate = retract || Boolean(core?.affects?.(change, ['review', 'sources']));
+      void refresh({retract, delay: immediate ? 0 : 400});
     }
   });
   api.stop = () => { hooks.off('truesightChanged', hook); stop(); };

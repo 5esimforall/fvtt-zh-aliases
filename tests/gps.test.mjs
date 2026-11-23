@@ -366,3 +366,18 @@ test('GPS resolves Indomitable despite monster and racial collisions and disambi
   }, {rules: 'modern'}), []);
   api.stop();
 });
+
+test('GPS collects name pairs at most once per mode across all baseline scopes', async () => {
+  const env = client();
+  let pairCalls = 0;
+  const api = await activate({
+    ...env,
+    core: {
+      ...core,
+      collectNamePairs: (...args) => { pairCalls++; return core.collectNamePairs(...args); }
+    }
+  });
+  assert.equal(pairCalls, 1);
+  assert.equal(api.report.scopes.length, 6);
+  api.stop();
+});

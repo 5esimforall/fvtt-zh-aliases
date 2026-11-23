@@ -1,6 +1,8 @@
 import {installLookupFallback} from './shared/medkit-lookup.mjs';
 import {lookupScope} from './shared/adapter-runtime.mjs';
 
+const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
+
 const lookupPacks = [
   'spells', 'items', 'feats', 'classFeatures', 'actions', 'raceFeatures',
   'speciesFeatures', 'miscellaneous', 'otherFeatures', 'monsterFeatures'
@@ -91,10 +93,12 @@ async function computeGlobalPlan({core, cpr, renamedItems, existingAliases, pack
     } catch (error) {
       return {report: {provider, ...core.sourceError(error, 'truesight')}};
     }
+    await nextTurn();
+    if (!isCurrent() || corpus.isCurrent?.() === false) return {report: {provider, status: 'superseded'}};
     // CPR's single exact-key table requires agreement across types and editions.
     const {aliases, report} = core.planAliases({pairs, lookupNames: names, existingAliases: existingAliases ?? renamedItems, groups});
     if (!isCurrent() || corpus.isCurrent?.() === false) return {report: {provider, status: 'superseded'}};
-    return {report: {...report, provider, grouping: 'truesight'}, aliases, corpus, groups};
+    return {report: {...report, provider, grouping: 'truesight'}, aliases, corpus, groups, pairs, pairKnownNames: names};
   } catch (error) {
     return {report: {provider, ...core.sourceError(error)}};
   }
@@ -138,9 +142,18 @@ export function createController(options) {
         names = lookupNames(sources, targetState.corpus.indexes, scope.types);
         targetState.sourcesCache.set(sourceKey, names);
       }
-      const pairs = options.core.collectNamePairs(targetState.corpus.sources, targetState.corpus.titleIndex, names, extraTranslations);
+      let missingIdKey = false;
+      for (const name of names) {
+        if (!targetState.pairKnownNames.has(name) && /^[A-Za-z0-9]{16}$/.test(name)) {
+          targetState.pairKnownNames.add(name);
+          missingIdKey = true;
+        }
+      }
+      if (missingIdKey) {
+        targetState.pairs = options.core.collectNamePairs(targetState.corpus.sources, targetState.corpus.titleIndex, targetState.pairKnownNames, extraTranslations);
+      }
       const planned = options.core.planAliases({
-        pairs,
+        pairs: targetState.pairs,
         lookupNames: names,
         existingAliases: targetState.externalAliases,
         groups: targetState.groups,
@@ -208,6 +221,8 @@ export function createController(options) {
       const nextScoped = {
         corpus: result.corpus,
         groups: result.groups,
+        pairs: result.pairs,
+        pairKnownNames: result.pairKnownNames,
         externalAliases,
         plans: new Map(),
         sourcesCache: new Map()

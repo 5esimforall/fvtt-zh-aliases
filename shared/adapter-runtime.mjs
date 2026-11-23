@@ -1,5 +1,7 @@
 import {installLookupFallback} from './medkit-lookup.mjs';
 
+const nextTurn = () => new Promise(resolve => setTimeout(resolve, 0));
+
 export function baselineScopes(itemTypes) {
   const scopes = [];
   for (const rules of ['2014', '2024']) {
@@ -26,11 +28,37 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
     return api;
   }
   let state, stop;
+  function pairsForMode(targetState, mode, scopeNames) {
+    let cached = targetState.pairsCache.get(mode);
+    if (!cached) {
+      const allNames = new Set(scopeNames);
+      for (const scope of baselineScopes(utils.constants.itemTypes)) {
+        for (const name of provider.catalogNames(targetState.corpus, mode, scope)) allNames.add(name);
+      }
+      cached = {
+        pairs: core.collectNamePairs(targetState.corpus.sources, targetState.corpus.titleIndex, allNames),
+        knownNames: allNames
+      };
+      targetState.pairsCache.set(mode, cached);
+    } else {
+      let missingIdKey = false;
+      for (const name of scopeNames) {
+        if (!cached.knownNames.has(name) && /^[A-Za-z0-9]{16}$/.test(name)) {
+          cached.knownNames.add(name);
+          missingIdKey = true;
+        }
+      }
+      if (missingIdKey) {
+        cached.pairs = core.collectNamePairs(targetState.corpus.sources, targetState.corpus.titleIndex, cached.knownNames);
+      }
+    }
+    return cached.pairs;
+  }
   function planFor(targetState, targetReport, mode, scope) {
     const key = JSON.stringify([mode, scope.rules, scope.type, scope.category ?? null, scope.excludeCategories ?? null, scope.actorType ?? null]);
     if (!targetState.plans.has(key)) {
       const names = provider.catalogNames(targetState.corpus, mode, scope);
-      const pairs = core.collectNamePairs(targetState.corpus.sources, targetState.corpus.titleIndex, names);
+      const pairs = pairsForMode(targetState, mode, names);
       const result = core.planAliases({pairs, lookupNames: names, groups: targetState.groups, scope});
       targetState.plans.set(key, result);
       targetReport.scopes.push({...result.report, mode});
@@ -67,13 +95,21 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
         } catch (error) {
           throw Object.assign(new Error('Grouping unavailable', {cause: error}), {source: 'truesight'});
         }
+        await nextTurn();
         if (!isCurrent() || corpus.isCurrent?.() === false) return;
-        const nextState = {corpus, groups, plans: new Map()};
+        const nextState = {corpus, groups, plans: new Map(), pairsCache: new Map()};
         const nextReport = {provider: provider.id, status: 'ready', grouping: 'truesight', scopes: []};
         // Validate every dictionary before enabling any fallback. Plans remain
         // scoped; the two editions never share a global display-name map.
         const mode = utils.genericUtils.getCPRSetting(provider.modeSetting);
-        for (const scope of baselineScopes(utils.constants.itemTypes)) planFor(nextState, nextReport, mode, scope);
+        const scopes = baselineScopes(utils.constants.itemTypes);
+        for (let i = 0; i < scopes.length; i++) {
+          planFor(nextState, nextReport, mode, scopes[i]);
+          if (i + 1 < scopes.length) {
+            await nextTurn();
+            if (!isCurrent() || corpus.isCurrent?.() === false) return;
+          }
+        }
         if (!isCurrent() || corpus.isCurrent?.() === false) return;
         if (!stop) stop = installLookupFallback({compendiumUtils: utils.compendiumUtils, source: provider.source, resolve, isActive,
           getSourceOrder: () => Object.keys(utils.genericUtils.getCPRSetting('additionalCompendiums') ?? {}),

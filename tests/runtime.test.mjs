@@ -342,3 +342,68 @@ test('CPR controller resolves scoped class features and titlebar lookups despite
   assert.equal(compendiumUtils.getAllAutomations, nativeAll);
   assert.equal(await compendiumUtils.getPreferredAutomation(rageFeat, {rules: 'modern'}), undefined);
 });
+
+test('cpr main entry ignores identity-only changes, debounces name refreshes without retracting, and retracts access immediately', async t => {
+  const env = client(), handlers = new Map(), self = {active: true};
+  let nextHookId = 0, corpusCalls = 0, planCalls = 0;
+  const revisions = {index: 0, sources: 0, names: 0, access: 0, review: 0, packs: 0};
+  connectCatalog({getStatus:()=>({status:'unreviewed', revisions}),whenReady: async () => {}, read: ids => ({apiVersion:1,status:'unreviewed',entries:new Map(ids.map(uuid => [uuid,{key:null}]))})});
+  const trackedCore = {
+    ...core,
+    loadCorpus: opts => { corpusCalls++; return core.loadCorpus(opts); },
+    planAliases: args => { planCalls++; return core.planAliases(args); }
+  };
+  const deps = {
+    Hooks: {
+      once: (event, callback) => handlers.set(event, callback),
+      on: (event, cb) => { const id = ++nextHookId; handlers.set(event + '#' + id, {event, cb}); return id; },
+      off: (_event, id) => { for (const [k, v] of handlers) if (k.endsWith('#' + id) && v.cb) handlers.delete(k); }
+    },
+    game: {
+      user: {isGM: false},
+      modules: new Map([['truesight', {active: true, api: {apiVersion: 1, names: trackedCore}}], ['cpr-zh-aliases', self], ['chris-premades', {active: true}], ['dnd-simplified-chinese-babele-patch', {active: true}]]),
+      packs: env.packs
+    },
+    chrisPremades: env.cpr, CONFIG: {chrisPremades: {renamedItems: env.renamedItems}},
+    location: {href: 'http://localhost/table/game'},
+    foundry: {utils: {getRoute: path => '/table/' + path}},
+    fetch: async () => ({ok: true, json: async () => env.loadTitleIndex()})
+  };
+  for (const [key, value] of Object.entries(deps)) {
+    const before = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, {value, configurable: true, writable: true});
+    t.after(() => before ? Object.defineProperty(globalThis, key, before) : delete globalThis[key]);
+  }
+  const url = new URL('../modules/cpr-zh-aliases/scripts/main.mjs?bust=' + Math.random(), import.meta.url);
+  await import(url.href);
+  handlers.get('init')();
+  await handlers.get('cprReady')();
+  t.after(() => self.api.stop());
+  assert.equal(corpusCalls, 1);
+  assert.equal(planCalls, 1);
+  assert.equal(env.renamedItems.迷踪步, 'Misty Step');
+
+  const emit = payload => {
+    for (const entry of handlers.values()) if (entry?.event === 'truesightChanged') entry.cb(payload);
+  };
+  emit({status: 'ready', changes: ['identity']});
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(corpusCalls, 1);
+  assert.equal(planCalls, 1);
+
+  revisions.names++;
+  for (let i = 0; i < 5; i++) emit({status: 'ready', changes: ['names']});
+  assert.equal(env.renamedItems.迷踪步, 'Misty Step');
+  assert.equal(corpusCalls, 1);
+  await new Promise(r => setTimeout(r, 460));
+  assert.equal(corpusCalls, 2);
+  assert.equal(planCalls, 2);
+
+  revisions.access++;
+  emit({status: 'ready', changes: ['access']});
+  assert.equal(env.renamedItems.迷踪步, undefined);
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(corpusCalls, 3);
+  assert.equal(planCalls, 3);
+  assert.equal(env.renamedItems.迷踪步, 'Misty Step');
+});
