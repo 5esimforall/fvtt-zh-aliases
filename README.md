@@ -97,9 +97,9 @@ docs/              # 架构与评估记录
 
 集成测试需要同级 `../truesight/module/` 源码；本项目不打包或复制基座。基座的独立测试、检查与打包在其项目内执行。
 
-使用 Node.js 22 或以上版本，无需安装 npm 依赖；打包及打包测试使用系统 `zip`、`unzip`。
+使用 Node.js 22 或以上版本；运行 `npm run check`（含 `tsc --noEmit`）前先通过 `npm install` 安装开发依赖，打包及打包测试使用系统 `zip`、`unzip`。
 
-修改 `shared/` 后先运行构建；测试和检查会拒绝过期的生成副本。打包也会自动构建共享代码，三个 ZIP 仍可独立安装。
+修改 `shared/` 后先运行构建；测试和检查会拒绝过期的生成副本，其中 `npm run check` 也会运行 `types/aliases.d.ts` 与共享／目录模块的静态类型检查（`npm run typecheck`）。打包也会自动构建共享代码，三个 ZIP 仍可独立安装。
 
 ```sh
 npm run build

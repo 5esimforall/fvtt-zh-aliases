@@ -1,8 +1,15 @@
 // Generated from shared/medkit-lookup.mjs. Edit the source, then run npm run build.
+// @ts-check
+
 // One router per CPR namespace, shared by independently installed adapter bundles.
 // The versioned symbol is a private registration protocol, not a provider alias table.
 const routerKey = Symbol.for('fvtt-zh-aliases.medkit-lookup.v1');
 
+/**
+ * @param {any} item
+ * @param {string} name
+ * @returns {any}
+ */
 function lookupView(item, name) {
   return new Proxy({}, {
     get: (_, key) => {
@@ -16,31 +23,59 @@ function lookupView(item, name) {
   });
 }
 
+/**
+ * @param {any} compendiumUtils
+ * @param {() => string[]} getSourceOrder
+ * @param {((item: any) => string | undefined) | undefined} getAppliedSource
+ */
 function createRouter(compendiumUtils, getSourceOrder, getAppliedSource) {
+  /** @type {Map<string, any>} */
   const providers = new Map();
+  /** @type {Record<string, any>} */
   const originals = {getAllAutomations: compendiumUtils.getAllAutomations};
   for (const key of ['getPreferredAutomation', 'getAppliedOrPreferredAutomation']) {
     if (typeof compendiumUtils[key] === 'function') originals[key] = compendiumUtils[key];
   }
+  /**
+   * @param {any} provider
+   * @param {unknown} error
+   */
   const notify = (provider, error) => { try { provider.onError(error); } catch { /* Diagnostics cannot replace native results. */ } };
+  /** @param {any} provider */
   const active = provider => {
     if (providers.get(provider.source) !== provider) return false;
     try { return provider.isActive(); } catch (error) { notify(provider, error); return false; }
   };
   const anyActive = () => [...providers.values()].some(active);
+  /**
+   * @param {any} provider
+   * @param {any} item
+   * @param {any} options
+   * @returns {string | null}
+   */
   const resolve = (provider, item, options) => {
     if (!active(provider)) return null;
     try { return provider.resolve(item, options); } catch (error) { notify(provider, error); return null; }
   };
 
+  /**
+   * @this {any}
+   * @param {any} item
+   * @param {any} [options]
+   * @returns {Promise<any>}
+   */
   async function getAllAutomations(item, options = {}) {
     // Preserve native exceptions and document identity. CPR mutates its options.
     const results = await originals.getAllAutomations.call(this, item, {...options});
     if (!Array.isArray(results) || !anyActive()) return results;
-    const retries = new Map(), additions = [];
+    /** @type {Map<string, Promise<any>>} */
+    const retries = new Map();
+    /** @type {Array<{ provider: any, name: string, entries: any[] }>} */
+    const additions = [];
     const candidates = [...providers.values()];
     // Equal-priority aliases use CPR's configured source order, never adapter
     // registration order. Existing native candidates retain their own tie order.
+    /** @type {string[]} */
     let order;
     try {
       order = getSourceOrder();
@@ -49,6 +84,7 @@ function createRouter(compendiumUtils, getSourceOrder, getAppliedSource) {
       candidates.forEach(provider => notify(provider, error));
       return results;
     }
+    /** @param {string} source */
     const rank = source => { const i = order.indexOf(source); return i < 0 ? Infinity : i; };
     candidates.sort((a, b) => (rank(a.source) - rank(b.source)) || a.source.localeCompare(b.source));
     for (const provider of candidates) {
@@ -70,6 +106,12 @@ function createRouter(compendiumUtils, getSourceOrder, getAppliedSource) {
     return extra.length ? [...results, ...extra].sort((a, b) => a.priority - b.priority) : results;
   }
 
+  /**
+   * @this {any}
+   * @param {any} item
+   * @param {any} options
+   * @returns {Promise<any>}
+   */
   async function preferred(item, options) {
     // Read the public entry at call time so later extensions remain in the path.
     const results = await compendiumUtils.getAllAutomations.call(this, item, {...options});
@@ -77,13 +119,14 @@ function createRouter(compendiumUtils, getSourceOrder, getAppliedSource) {
     return results[0]?.document;
   }
 
+  /** @type {Record<string, any>} */
   const wrappers = {getAllAutomations};
-  if (originals.getPreferredAutomation) wrappers.getPreferredAutomation = async function(item, options = {}) {
+  if (originals.getPreferredAutomation) wrappers.getPreferredAutomation = /** @this {any} @param {any} item @param {any} [options] */ async function(item, options = {}) {
     if (!anyActive()) return originals.getPreferredAutomation.call(this, item, {...options});
     return preferred.call(this, item, options);
   };
   if (originals.getAppliedOrPreferredAutomation && typeof getAppliedSource === 'function') {
-    wrappers.getAppliedOrPreferredAutomation = async function(item, options = {}) {
+    wrappers.getAppliedOrPreferredAutomation = /** @this {any} @param {any} item @param {any} [options] */ async function(item, options = {}) {
       if (!anyActive()) return originals.getAppliedOrPreferredAutomation.call(this, item, {...options});
       const source = getAppliedSource(item);
       if (!source) return preferred.call(this, item, options);
@@ -105,6 +148,7 @@ function createRouter(compendiumUtils, getSourceOrder, getAppliedSource) {
   }
   const router = {
     protocol: 1,
+    /** @param {any} provider */
     register(provider) {
       if (providers.has(provider.source)) return null;
       providers.set(provider.source, provider);
@@ -128,6 +172,10 @@ function createRouter(compendiumUtils, getSourceOrder, getAppliedSource) {
   return router;
 }
 
+/**
+ * @param {import('../types/aliases.d.ts').LookupFallbackOptions} options
+ * @returns {(() => void) | null}
+ */
 export function installLookupFallback({compendiumUtils, source, resolve, isActive = () => true, onError = () => {},
   getSourceOrder = () => [], getAppliedSource}) {
   if (typeof compendiumUtils?.getAllAutomations !== 'function' || typeof source !== 'string' || typeof resolve !== 'function') return null;

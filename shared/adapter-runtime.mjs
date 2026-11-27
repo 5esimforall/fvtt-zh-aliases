@@ -1,5 +1,30 @@
+// @ts-check
+
 import {installLookupFallback} from './medkit-lookup.mjs';
 
+/**
+ * @typedef {import('../types/aliases.d.ts').ActivateProviderOptions} ActivateProviderOptions
+ * @typedef {import('../types/aliases.d.ts').AdapterApi} AdapterApi
+ * @typedef {import('../types/aliases.d.ts').AdapterReport} AdapterReport
+ * @typedef {import('../types/aliases.d.ts').AliasPlan} AliasPlan
+ * @typedef {import('../types/aliases.d.ts').AliasScope} AliasScope
+ * @typedef {import('../types/aliases.d.ts').CorpusSnapshot} CorpusSnapshot
+ * @typedef {import('../types/aliases.d.ts').NameEvidenceEntry} NameEvidenceEntry
+ * @typedef {import('../types/aliases.d.ts').NamePair} NamePair
+ * @typedef {import('../types/aliases.d.ts').TruesightNamesApi} TruesightNamesApi
+ * @typedef {{
+ *   corpus: CorpusSnapshot,
+ *   groups: Map<string, NameEvidenceEntry[]>,
+ *   plans: Map<string, AliasPlan>,
+ *   pairsCache: Map<number, { pairs: NamePair[], knownNames: Set<string> }>
+ * }} ProviderRuntimeState
+ */
+
+/**
+ * @param {boolean} [idle]
+ * @param {number} [idleTimeout]
+ * @returns {Promise<void>}
+ */
 export function yieldTurn(idle = false, idleTimeout = 1000) {
   return new Promise(resolve => {
     if (idle && typeof globalThis.requestIdleCallback === 'function') {
@@ -10,9 +35,14 @@ export function yieldTurn(idle = false, idleTimeout = 1000) {
   });
 }
 
+/**
+ * @param {readonly string[]} itemTypes
+ * @returns {AliasScope[]}
+ */
 export function baselineScopes(itemTypes) {
+  /** @type {AliasScope[]} */
   const scopes = [];
-  for (const rules of ['2014', '2024']) {
+  for (const rules of /** @type {const} */ (['2014', '2024'])) {
     scopes.push(
       {rules, type: 'spell', types: ['spell']},
       {rules, type: 'feat', types: ['feat'], excludeCategories: ['monster'], actorType: 'character'},
@@ -22,7 +52,12 @@ export function baselineScopes(itemTypes) {
   return scopes;
 }
 
+/**
+ * @param {ActivateProviderOptions} options
+ * @returns {Promise<AdapterApi>}
+ */
 export async function activateProvider({provider, core, cpr, loadCorpus, isActive = () => true}) {
+  /** @type {AdapterApi} */
   const api = {report: {provider: provider.id, status: 'loading'}};
   if (core?.apiVersion !== 1 || typeof core.createRefreshQueue !== 'function') {
     api.report.status = 'unsupported-core';
@@ -35,7 +70,16 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
     api.report.status = 'unsupported-' + provider.id + '-entry';
     return api;
   }
-  let state, stop;
+  /** @type {ProviderRuntimeState | null | undefined} */
+  let state;
+  /** @type {(() => void) | null | undefined} */
+  let stop;
+  /**
+   * @param {ProviderRuntimeState} targetState
+   * @param {number} mode
+   * @param {Set<string>} scopeNames
+   * @returns {NamePair[]}
+   */
   function pairsForMode(targetState, mode, scopeNames) {
     let cached = targetState.pairsCache.get(mode);
     if (!cached) {
@@ -62,18 +106,31 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
     }
     return cached.pairs;
   }
+  /**
+   * @param {ProviderRuntimeState} targetState
+   * @param {AdapterReport} targetReport
+   * @param {number} mode
+   * @param {AliasScope} scope
+   * @param {Set<string> | null} [precomputedNames]
+   * @returns {AliasPlan}
+   */
   function planFor(targetState, targetReport, mode, scope, precomputedNames = null) {
     const key = JSON.stringify([mode, scope.rules, scope.type, scope.category ?? null, scope.excludeCategories ?? null, scope.actorType ?? null]);
-    if (!targetState.plans.has(key)) {
-      const names = precomputedNames ?? provider.catalogNames(targetState.corpus, mode, scope);
-      const pairs = pairsForMode(targetState, mode, names);
-      const result = core.planAliases({pairs, lookupNames: names, groups: targetState.groups, scope});
-      targetState.plans.set(key, result);
-      targetReport.scopes.push({...result.report, mode});
-      if (result.report.status === 'cluster-conflict') targetReport.status = 'cluster-conflict';
-    }
-    return targetState.plans.get(key);
+    const existing = targetState.plans.get(key);
+    if (existing) return existing;
+    const names = precomputedNames ?? provider.catalogNames(targetState.corpus, mode, scope);
+    const pairs = pairsForMode(targetState, mode, names);
+    const result = core.planAliases({pairs, lookupNames: names, groups: targetState.groups, scope});
+    targetState.plans.set(key, result);
+    (targetReport.scopes ??= []).push({...result.report, mode});
+    if (result.report.status === 'cluster-conflict') targetReport.status = 'cluster-conflict';
+    return result;
   }
+  /**
+   * @param {any} item
+   * @param {any} options
+   * @returns {string | null}
+   */
   function resolve(item, options) {
     const valid = state?.corpus.isAccessCurrent ? state.corpus.isAccessCurrent() : state?.corpus.isCurrent?.() !== false;
     if (state && !valid) state = null;
@@ -98,6 +155,7 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
         const idle = Boolean(options?.idle);
         const corpus = await loadCorpus();
         if (!isCurrent() || corpus.isCurrent?.() === false) return;
+        /** @type {ReturnType<TruesightNamesApi['itemGroups']>} */
         let groups;
         try {
           groups = core.itemGroups(corpus.indexes, corpus.catalogFor, corpus.localItems);
@@ -106,13 +164,16 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
         }
         await yieldTurn(idle);
         if (!isCurrent() || corpus.isCurrent?.() === false) return;
+        /** @type {ProviderRuntimeState} */
         const nextState = {corpus, groups, plans: new Map(), pairsCache: new Map()};
+        /** @type {AdapterReport} */
         const nextReport = {provider: provider.id, status: 'ready', grouping: 'truesight', scopes: []};
         // Validate every dictionary before enabling any fallback. Plans remain
         // scoped; the two editions never share a global display-name map.
         const mode = utils.genericUtils.getCPRSetting(provider.modeSetting);
         const scopes = baselineScopes(utils.constants.itemTypes);
         const scopeNamesList = scopes.map(scope => provider.catalogNames(nextState.corpus, mode, scope));
+        /** @type {Set<string>} */
         const allNames = new Set();
         for (const names of scopeNamesList) for (const name of names) allNames.add(name);
         nextState.pairsCache.set(mode, {
@@ -160,6 +221,13 @@ export async function activateProvider({provider, core, cpr, loadCorpus, isActiv
   return api;
 }
 
+/**
+ * @param {any} item
+ * @param {any} options
+ * @param {TruesightNamesApi} core
+ * @param {readonly string[]} itemTypes
+ * @returns {AliasScope | null}
+ */
 export function lookupScope(item, options, core, itemTypes) {
   const rules = core.rulesEdition(options.rules ?? 'legacy');
   if (!rules) return null;
@@ -167,7 +235,7 @@ export function lookupScope(item, options, core, itemTypes) {
   // covered. NPC spells still use the ordinary spell catalog, as CPR does.
   let actorType = item.actor?.type ?? 'character';
   if (actorType !== 'character' && actorType !== 'npc') return null;
-  if (item.actor?.items?.find(entry => entry.type === 'class')) actorType = 'character';
+  if (item.actor?.items?.find((/** @type {any} */ entry) => entry.type === 'class')) actorType = 'character';
   if (actorType === 'npc' && item.type !== 'spell') return null;
   const type = item.type === 'spell' || item.type === 'feat' ? item.type
     : itemTypes.includes(item.type) ? 'item' : null;
